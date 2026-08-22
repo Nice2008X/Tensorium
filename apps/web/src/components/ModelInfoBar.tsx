@@ -2,7 +2,7 @@ import type { Model } from "@tensorium/model-ir";
 import { totalParameterCount, totalParameterBytes } from "@tensorium/model-ir";
 import { formatBytes, formatCount } from "../format.js";
 
-export function ModelInfoBar({ model }: { model: Model }) {
+export function ModelInfoBar({ model, structureOnly }: { model: Model; structureOnly?: boolean }) {
   const params = totalParameterCount(model);
   const bytes = totalParameterBytes(model);
   const dtype = Object.values(model.nodes).find((n) => n.parameters.length > 0)?.parameters[0]?.dtype ?? "—";
@@ -17,12 +17,22 @@ export function ModelInfoBar({ model }: { model: Model }) {
     ["Vocabulary", model.config.vocabSize.toLocaleString()],
     ["Context length", model.config.contextLength.toLocaleString()],
     ["Dtype", dtype],
-    ["Weights (in browser)", formatBytes(bytes)],
+    [structureOnly ? "Weights (real, not downloaded)" : "Weights (in browser)", formatBytes(bytes)],
   ];
 
   return (
     <div className="model-info-bar">
-      <div className="model-info-name">{model.name}</div>
+      <div className="model-info-name">
+        {model.name}
+        {structureOnly && (
+          <span
+            className="model-info-structure-badge"
+            title="This checkpoint is too large (or sharded) to download in a browser tab — the architecture and every tensor's shape/dtype above are exact, but no real weight bytes were ever fetched. A forward pass runs against randomly generated values instead, if enabled in Settings."
+          >
+            Structure only
+          </span>
+        )}
+      </div>
       <div className="model-info-stats">
         {stats.map(([label, value]) => (
           <div key={label} className="model-info-stat">

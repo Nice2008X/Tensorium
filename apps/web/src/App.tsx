@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { Model, Tensor } from "@tensorium/model-ir";
+import { totalParameterBytes } from "@tensorium/model-ir";
 import { useModel } from "./useModel.js";
 import { useInference } from "./useInference.js";
 import { useLocalStorageState } from "./useLocalStorageState.js";
@@ -80,6 +81,27 @@ export function App() {
   const [resizingBottom, setResizingBottom] = useState(false);
   const [predictionCollapsed, setPredictionCollapsed] = useLocalStorageState("panel:prediction-collapsed", false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  // Off by default: a structure-only model's real weights were deliberately
+  // never downloaded (too large or sharded — see hf-client's
+  // fetchModelStructure), so running inference against it means fabricated
+  // random weights, not the model's real behavior. Gating this behind an
+  // explicit opt-in keeps that from being a silent trap.
+  const [allowSyntheticForwardPass, setAllowSyntheticForwardPass] = useLocalStorageState("settings:allow-synthetic-forward-pass", false);
+  // Plain (non-persisted) state, not a setting: dismissing the structure-only
+  // note just hides it for the currently-loaded model — reset below whenever
+  // a different model loads, so a genuinely new large model still gets the
+  // warning even if a previous one's was dismissed.
+  const [structureOnlyNoteDismissed, setStructureOnlyNoteDismissed] = useState(false);
+  // Turning synthetic forward passes ON — whether from Settings or the
+  // note's own "Enable anyway" — should surface the note again even if it
+  // was previously dismissed, since enabling it is exactly the moment a
+  // "this uses fake weights and may be slow" reminder (now with a quick
+  // "Disable" action) is most useful. Turning it back off doesn't need the
+  // same treatment: the note is already on screen at that point.
+  const setAllowSyntheticForwardPassAndReveal = (next: boolean) => {
+    setAllowSyntheticForwardPass(next);
+    if (next) setStructureOnlyNoteDismissed(false);
+  };
 
   const inference = useInference(state.model, state.weightProvider, state.adapter, state.tokenizer);
   const promptB = useInference(state.model, state.weightProvider, state.adapter, state.tokenizer);
@@ -110,6 +132,7 @@ export function App() {
     setAttributionSource("A");
     inference.reset();
     promptB.reset();
+    setStructureOnlyNoteDismissed(false);
   }, [state.model]);
 
   // Per-node activation magnitude (L2 norm) from the last run — computed
@@ -134,7 +157,7 @@ export function App() {
       <div className="app-loader-screen">
         <div className="top-right-controls">
           <SettingsButton open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
-          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} />
+          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} allowSyntheticForwardPass={allowSyntheticForwardPass} onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal} />
         </div>
         {showRestoring ? (
           <div className="app-restoring">
@@ -150,6 +173,16 @@ export function App() {
   }
 
   const model = state.model;
+  const structureOnly = state.metadata?.structureOnly === true;
+  const forwardPassBlocked = structureOnly && !allowSyntheticForwardPass;
+  // Rough floor, not a precise prediction: every tensor this app touches is
+  // materialized as a Float64Array (8 bytes/element) regardless of its
+  // on-disk dtype (BF16/F16 = 2 bytes/element on every structure-only preset
+  // today), and a full forward pass has to load every layer's weights, not
+  // just the ones a user happens to click in Tensor Explorer — so 4x the
+  // checkpoint's real declared size is the minimum it'll actually hold in
+  // memory once cached, before counting per-array JS engine overhead on top.
+  const estimatedForwardPassBytes = totalParameterBytes(model) * 4;
   const selectedNode = selectedId ? model.nodes[selectedId] ?? null : null;
   // Defends against the one render where a just-finished model load has
   // landed but `view`/`selectedId` haven't been reset to match yet (the
@@ -262,7 +295,7 @@ export function App() {
 
   return (
     <div className={"app" + (analysisBusy ? " app-busy" : "") + (resizingBottom ? " app-resizing-panel" : "")}>
-      <ModelInfoBar model={model} />
+      <ModelInfoBar model={model} structureOnly={structureOnly} />
       <div className="top-right-controls">
         <div className="control-group">
           <button className="close-model" onClick={reset} title={t("app.closeModel")}>
@@ -287,7 +320,7 @@ export function App() {
         </div>
         <div className="control-group">
           <SettingsButton open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
-          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} />
+          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} allowSyntheticForwardPass={allowSyntheticForwardPass} onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal} />
         </div>
       </div>
       <InferencePanel
@@ -300,6 +333,13 @@ export function App() {
         onToggleCompare={() => setCompareEnabled((v) => !v)}
         promptBState={promptB.state}
         onRunB={promptB.run}
+        structureOnly={structureOnly}
+        forwardPassBlocked={forwardPassBlocked}
+        onEnableForwardPass={() => setAllowSyntheticForwardPassAndReveal(true)}
+        onDisableForwardPass={() => setAllowSyntheticForwardPass(false)}
+        estimatedForwardPassBytes={estimatedForwardPassBytes}
+        noteDismissed={structureOnlyNoteDismissed}
+        onDismissNote={() => setStructureOnlyNoteDismissed(true)}
       />
       {hasResult && state.tokenizer && (
         <div className="prediction-panels-row">
@@ -421,6 +461,7 @@ export function App() {
             selectedTokenIndex={selectedTokenIndex}
             promptBInference={promptB.state}
             sourceRequest={tensorSourceRequest}
+            structureOnly={structureOnly}
           />
         )}
         {!bottomCollapsed && bottomTab === "logitlens" && analysisTabsEnabled && state.tokenizer && (

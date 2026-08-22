@@ -93,8 +93,9 @@ export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excl
     () => PRESET_MODELS.filter((p) => p.repo !== excludeRepo).sort((a, b) => a.label.localeCompare(b.label)),
     [excludeRepo]
   );
-  const presetsWithoutMoe = useMemo(() => sortedPresets.filter((p) => !p.isMoE), [sortedPresets]);
-  const presetsWithMoe = useMemo(() => sortedPresets.filter((p) => p.isMoE), [sortedPresets]);
+  const presetsWithoutMoe = useMemo(() => sortedPresets.filter((p) => !p.isMoE && !p.isLarge), [sortedPresets]);
+  const presetsWithMoe = useMemo(() => sortedPresets.filter((p) => p.isMoE && !p.isLarge), [sortedPresets]);
+  const presetsLarge = useMemo(() => sortedPresets.filter((p) => p.isLarge), [sortedPresets]);
   const [repo, setRepo] = useState(() => PRESET_MODELS.find((p) => p.repo !== excludeRepo)?.repo ?? "");
   const [mode, setMode] = useState<SourceMode>("huggingface");
   const [configFile, setConfigFile] = useState<File | null>(null);
@@ -174,6 +175,7 @@ export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excl
             groups={[
               { key: "without-moe", title: t("loader.presetsWithoutMoe"), presets: presetsWithoutMoe },
               { key: "with-moe", title: t("loader.presetsWithMoe"), presets: presetsWithMoe },
+              { key: "large", title: t("loader.presetsLarge"), presets: presetsLarge },
             ]}
             onPick={(repo) => {
               setRepo(repo);

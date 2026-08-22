@@ -8,6 +8,8 @@ interface Props {
   onClose: () => void;
   theme: Theme;
   onThemeChange: (t: Theme) => void;
+  allowSyntheticForwardPass: boolean;
+  onAllowSyntheticForwardPassChange: (v: boolean) => void;
 }
 
 export function SettingsButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -19,7 +21,7 @@ export function SettingsButton({ open, onToggle }: { open: boolean; onToggle: ()
   );
 }
 
-export function SettingsPanel({ open, onClose, theme, onThemeChange }: Props) {
+export function SettingsPanel({ open, onClose, theme, onThemeChange, allowSyntheticForwardPass, onAllowSyntheticForwardPassChange }: Props) {
   const { t, language, setLanguage } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +64,17 @@ export function SettingsPanel({ open, onClose, theme, onThemeChange }: Props) {
             </option>
           ))}
         </select>
+      </div>
+      <div className="settings-section">
+        <label className="settings-checkbox-row">
+          <input
+            type="checkbox"
+            checked={allowSyntheticForwardPass}
+            onChange={(e) => onAllowSyntheticForwardPassChange(e.target.checked)}
+          />
+          {t("settings.structureOnlyForwardPass")}
+        </label>
+        <div className="settings-section-desc">{t("settings.structureOnlyForwardPassDesc")}</div>
       </div>
     </div>
   );

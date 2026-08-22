@@ -1,5 +1,5 @@
 import type { LoadProgress, Model, ModelAdapter, ModelMetadata, ModelSource, WeightProvider } from "@tensorium/model-ir";
-import { SafetensorsWeightProvider } from "@tensorium/tensor-core";
+import { SafetensorsWeightProvider, SyntheticWeightProvider } from "@tensorium/tensor-core";
 import { loadSafetensorsMetadata } from "@tensorium/hf-client";
 import { buildModelConfig, buildGraph, type GPT2RawConfig } from "./graph.js";
 import { runInference } from "./inference.js";
@@ -16,7 +16,7 @@ export const GPT2Adapter: ModelAdapter = {
   },
 
   async loadMetadata(source: ModelSource, onProgress?: (progress: LoadProgress) => void): Promise<ModelMetadata> {
-    const { rawConfig, weightIndex, weightsBuffer } = await loadSafetensorsMetadata<GPT2RawConfig>(source, onProgress);
+    const { rawConfig, weightIndex, weightsBuffer, structureOnly } = await loadSafetensorsMetadata<GPT2RawConfig>(source, onProgress);
 
     return {
       architecture: (rawConfig.architectures && rawConfig.architectures[0]) || "GPT2LMHeadModel",
@@ -24,6 +24,7 @@ export const GPT2Adapter: ModelAdapter = {
       weightIndex,
       source,
       weightsBuffer,
+      structureOnly,
     };
   },
 
@@ -32,6 +33,7 @@ export const GPT2Adapter: ModelAdapter = {
   },
 
   getWeightProvider(metadata: ModelMetadata): WeightProvider {
+    if (metadata.structureOnly) return new SyntheticWeightProvider(PROVIDER_ID, metadata.weightIndex);
     if (!metadata.weightsBuffer) throw new Error("No weights buffer available on this metadata");
     return new SafetensorsWeightProvider(PROVIDER_ID, metadata.weightsBuffer);
   },
