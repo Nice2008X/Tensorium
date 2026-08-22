@@ -10,6 +10,7 @@ import { Glm4Adapter } from "@tensorium/adapter-glm4";
 import { OlmoAdapter } from "@tensorium/adapter-olmo";
 import { QwenMoeAdapter } from "@tensorium/adapter-qwen-moe";
 import { Qwen3MoeAdapter } from "@tensorium/adapter-qwen3-moe";
+import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
 
 /**
  * Every architecture the explorer supports. Adding a new one means writing
@@ -27,7 +28,13 @@ import { Qwen3MoeAdapter } from "@tensorium/adapter-qwen3-moe";
  * token instead of running one dense FFN on every token — every layer for
  * Qwen2-MoE, every other layer for Qwen3-MoE, which keeps its dense layers
  * as plain gated FFNs) for Qwen2-MoE/Qwen3-MoE — rather than separate
- * copies of ~400 lines each).
+ * copies of ~400 lines each). DeepSeek-V2(-Lite) is the one exception that
+ * gets its own adapter package instead of another llama-family flag: its
+ * Multi-head Latent Attention (K/V reconstructed from one shared low-rank
+ * latent, only part of each head gets RoPE) and DeepSeekMoE (fine-grained
+ * experts, unconditional always-on shared experts, optional group-limited
+ * routing) are structurally different enough from GQA + Qwen-style MoE to
+ * need their own graph/inference modules, the same way GPT-2 does.
  */
 export const ADAPTERS: ModelAdapter[] = [
   GPT2Adapter,
@@ -41,6 +48,7 @@ export const ADAPTERS: ModelAdapter[] = [
   OlmoAdapter,
   QwenMoeAdapter,
   Qwen3MoeAdapter,
+  DeepseekV2Adapter,
 ];
 
 // NOTE: this MVP's WeightProvider downloads the whole safetensors file up
@@ -61,6 +69,11 @@ export const PRESET_MODELS = [
   { repo: "katuni4ka/tiny-random-olmo-hf", label: "OLMo · tiny-random-olmo-hf (2 layers, 2 heads, hidden=64, non-parametric LayerNorm)", isMoE: false },
   { repo: "katuni4ka/tiny-random-qwen1.5-moe", label: "Qwen2-MoE · tiny-random-qwen1.5-moe (4 layers, 8 experts, top-4 + shared expert)", isMoE: true },
   { repo: "tiny-random/qwen3-moe", label: "Qwen3-MoE · tiny-random/qwen3-moe (2 layers, 1 dense + 1 MoE, QK-Norm, top-2 of 8)", isMoE: true },
+  {
+    repo: "yujiepan/deepseek-v2-0628-tiny-random",
+    label: "DeepSeek-V2 · deepseek-v2-0628-tiny-random (2 layers, 1 dense + 1 MoE, MLA, group-limited routing)",
+    isMoE: true,
+  },
 ];
 
 // NOTE on DeepSeek LLM: architecturally it's plain Llama (LlamaAdapter loads

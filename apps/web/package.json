@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tensorium/adapter-deepseek-v2": "*",
     "@tensorium/adapter-gemma": "*",
     "@tensorium/adapter-glm4": "*",
     "@tensorium/adapter-gpt2": "*",
