@@ -248,6 +248,9 @@ const edgeTypes = { lane: ResidualLaneEdge, detour: DetourEdge };
 
 const EDGE_COLOR = "#94a3b8";
 const SKIP_EDGE_COLOR = "#64748b";
+const HUB_EDGE_COLOR = "#38bdf8";
+/** A source feeding this many or more rank-skipping targets (e.g. Gemma-4's Per-Layer Input Projection reaching every one of 35 blocks) gets bus-lane routing instead of the local per-edge detour: below this, the ordinary detour/port system already reads fine (an FFN's Gate+Up, an attention block's Q/K/V), but every edge past this count would otherwise get pushed one `LANE_SEPARATION` further out than the last as their spans pile up, fanning into an ever-widening staircase. */
+const HUB_MIN_TARGETS = 3;
 /** Rough node width used only to eyeball where a junction dot sits horizontally — nodes auto-size, so this is an approximation, not a measurement. */
 const NOMINAL_NODE_WIDTH = 160;
 /** Rough node height, same caveat as NOMINAL_NODE_WIDTH — used only to size the scope box around a selected container's leaf children. */
@@ -329,7 +332,7 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
   // Detours are then greedily nudged further out, away from whichever side
   // they're already on, wherever two lanes' vertical runs would otherwise
   // overlap in y at the same x.
-  const { skipLaneXByEdge, detourByEdge } = useMemo(() => {
+  const { skipLaneXByEdge, hubLaneXByEdge, detourByEdge, bypassEdgeIds, branchingHubEdgeIds } = useMemo(() => {
     type Span = { lo: number; hi: number };
     const spanOf = (e: ModelEdge): Span | null => {
       const sy = positions.get(e.source)?.y;
@@ -346,7 +349,9 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
     };
 
     const skipLaneXByEdge = new Map<string, number>();
+    const hubLaneXByEdge = new Map<string, number>();
     const placed: { lo: number; hi: number; x: number }[] = [];
+    const hubSpans: Span[] = [];
 
     let viewMaxRight = 0;
     for (const id of nodeIds) {
@@ -362,8 +367,63 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
       placed.push({ ...span, x: skipLaneX });
     }
 
+    // A single source reaching many rank-skipping targets (Gemma-4's
+    // Per-Layer Input Projection feeding all 35 blocks is the case that
+    // motivated this) gets the exact same treatment as a residual: one
+    // shared lane, cleared against the whole view, exiting straight out the
+    // side — safe for the same reason residuals are, since a hub source and
+    // every one of its targets are always the sole node in their rank here.
+    // Handled *before* the ordinary per-edge detours below so those can see
+    // (and steer clear of) whatever side the bus already claimed.
+    // Grouped by *raw* rank distance rather than spanOf's stricter
+    // "something's actually in the way" test — once a source clears the hub
+    // threshold, every one of its targets gets the same bus treatment for
+    // consistency's sake, including any that happen to sit on the very next
+    // rank with nothing between them (Gemma-4's Per-Layer Input Projection
+    // reaching Block 0 itself, right below it, exactly as uniformly as it
+    // reaches Block 34) — otherwise that one target would be the sole
+    // holdout still merging onto the ordinary top port.
+    const spanLoose = (e: ModelEdge): Span | null => {
+      const sy = positions.get(e.source)?.y;
+      const ty = positions.get(e.target)?.y;
+      if (sy == null || ty == null || sy === ty) return null;
+      return { lo: Math.min(sy, ty), hi: Math.max(sy, ty) };
+    };
+    const spanByCandidateEdge = new Map<string, Span>();
+    const bySourceCandidate = new Map<string, ModelEdge[]>();
+    for (const e of edgeList) {
+      if (e.label === "skip") continue;
+      const span = spanLoose(e);
+      if (!span) continue;
+      spanByCandidateEdge.set(e.id, span);
+      if (!bySourceCandidate.has(e.source)) bySourceCandidate.set(e.source, []);
+      bySourceCandidate.get(e.source)!.push(e);
+    }
+    const hubLaneX = skipLaneX + LANE_GAP;
+    const hubIds = new Set<string>();
+    for (const [source, edges] of bySourceCandidate) {
+      // Counting *distinct ranks* reached, not raw edge count, is what
+      // actually distinguishes a hub from an everyday parallel branch: an
+      // attention block's RMSNorm splitting into Q/K/V has 3 edges too, but
+      // all 3 land on the very same rank (ordinary siblings side by side,
+      // exactly what the numbered-port system below already draws well) —
+      // nothing like Per-Layer Input Projection's 35 edges, each landing on
+      // its *own* rank down a long chain of blocks. Only the latter shape
+      // benefits from bus routing; the former would just be sent on an
+      // unnecessary detour to the far right for no visual gain.
+      const distinctRanks = new Set(edges.map((e) => positions.get(e.target)?.y));
+      if (distinctRanks.size < HUB_MIN_TARGETS) continue;
+      hubIds.add(source);
+      for (const e of edges) {
+        const span = spanByCandidateEdge.get(e.id)!;
+        hubLaneXByEdge.set(e.id, hubLaneX);
+        placed.push({ ...span, x: hubLaneX });
+        hubSpans.push(span);
+      }
+    }
+
     const localCandidates = edgeList
-      .filter((e) => e.label !== "skip")
+      .filter((e) => e.label !== "skip" && !hubLaneXByEdge.has(e.id))
       .map((e) => {
         const span = spanOf(e);
         if (!span) return null;
@@ -381,9 +441,14 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
         }
         const rightX = obRight + LANE_GAP;
         const leftX = obLeft - LANE_GAP;
+        // A bus lane always sits on the right (see hubLaneX/skipLaneX
+        // above); anything else whose span overlaps it should default to
+        // the left instead of merely nudging away once too close, so it
+        // never reads as "part of" the bus in the first place.
+        const sharesHubSpan = hubSpans.some((h) => span.lo < h.hi && h.lo < span.hi);
         const costRight = Math.abs(rightX - sourceX) + Math.abs(rightX - targetX);
         const costLeft = Math.abs(leftX - sourceX) + Math.abs(leftX - targetX);
-        const x = costLeft < costRight ? leftX : rightX;
+        const x = sharesHubSpan ? leftX : costLeft < costRight ? leftX : rightX;
         return { id: e.id, ...span, x };
       })
       .filter((c): c is { id: string; lo: number; hi: number; x: number } => !!c)
@@ -409,7 +474,36 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
       placed.push({ lo: c.lo, hi: c.hi, x });
       detourByEdge.set(c.id, x);
     }
-    return { skipLaneXByEdge, detourByEdge };
+
+    // A hub's own *direct* predecessors (an edge landing on the hub from an
+    // adjacent rank, with nothing between them) get decluttered too: a
+    // predecessor that *also* reaches past the hub to a later rank
+    // (Gemma-4's Token Embedding starts the main residual stream at
+    // Transformer Block 0 *and* feeds Per-Layer Input Projection) gets its
+    // two edges pinned to opposite numbered ports instead of whatever order
+    // they'd otherwise fall in: the bypass — which already detours out to
+    // the far side via sharesHubSpan above — keeps that same side's port on
+    // its own source, and the hub-bound edge takes the hub's port on the
+    // *other* side, so the two stay visually paired with their own routing
+    // rather than crossing back over each other right at the source/target.
+    const bypassEdgeIds = new Set<string>();
+    const branchingHubEdgeIds = new Set<string>();
+    for (const hubId of hubIds) {
+      const hubPos = positions.get(hubId);
+      if (!hubPos) continue;
+      const predecessorEdges = edgeList.filter((e) => e.target === hubId && e.source !== hubId && e.label !== "skip");
+      for (const e of predecessorEdges) {
+        const bypass = edgeList.find(
+          (o) => o.source === e.source && o.id !== e.id && o.target !== hubId && o.label !== "skip" && (positions.get(o.target)?.y ?? -Infinity) > hubPos.y
+        );
+        if (bypass) {
+          bypassEdgeIds.add(bypass.id);
+          branchingHubEdgeIds.add(e.id);
+        }
+      }
+    }
+
+    return { skipLaneXByEdge, hubLaneXByEdge, detourByEdge, bypassEdgeIds, branchingHubEdgeIds };
   }, [nodeIds, edgeList, positions]);
 
   // Multiple edges sharing one source (a branch) or one target (a merge)
@@ -424,7 +518,7 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
     const bySource = new Map<string, ModelEdge[]>();
     const byTarget = new Map<string, ModelEdge[]>();
     for (const e of edgeList) {
-      if (skipLaneXByEdge.has(e.id)) continue;
+      if (skipLaneXByEdge.has(e.id) || hubLaneXByEdge.has(e.id)) continue;
       if (!bySource.has(e.source)) bySource.set(e.source, []);
       bySource.get(e.source)!.push(e);
       if (!byTarget.has(e.target)) byTarget.set(e.target, []);
@@ -436,7 +530,15 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
     for (const [id, edges] of bySource) {
       outputPortsById.set(id, edges.length);
       if (edges.length <= 1) continue;
-      const sorted = [...edges].sort((a, b) => (positions.get(a.target)?.x ?? 0) - (positions.get(b.target)?.x ?? 0));
+      // A source with both a bypass edge and a hub-bound edge (Token
+      // Embedding here) always gets the bypass on its leftmost port and the
+      // hub-bound edge to its right, regardless of where their targets
+      // happen to sit — both already detour to a specific side on their own
+      // (the bypass via sharesHubSpan, the hub-bound edge by simply being
+      // short), so the port order should agree with that instead of an
+      // arbitrary x-position tie.
+      const sourcePriority = (e: ModelEdge) => (bypassEdgeIds.has(e.id) ? -1 : branchingHubEdgeIds.has(e.id) ? 1 : 0);
+      const sorted = [...edges].sort((a, b) => sourcePriority(a) - sourcePriority(b) || (positions.get(a.target)?.x ?? 0) - (positions.get(b.target)?.x ?? 0));
       sorted.forEach((e, i) => sourceHandleByEdge.set(e.id, `src-${i}`));
     }
 
@@ -445,12 +547,18 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
     for (const [id, edges] of byTarget) {
       inputPortsById.set(id, edges.length);
       if (edges.length <= 1) continue;
-      const sorted = [...edges].sort((a, b) => (positions.get(a.source)?.x ?? 0) - (positions.get(b.source)?.x ?? 0));
+      // Mirrors the source-side bias just above: the incoming edge from a
+      // branching predecessor (one that also bypasses this hub — Token
+      // Embedding, here) always lands on the hub's leftmost port, so it
+      // reads as a matched pair with that predecessor's own leftmost
+      // (bypass) port rather than landing wherever raw x-position puts it.
+      const targetPriority = (e: ModelEdge) => (branchingHubEdgeIds.has(e.id) ? -1 : 0);
+      const sorted = [...edges].sort((a, b) => targetPriority(a) - targetPriority(b) || (positions.get(a.source)?.x ?? 0) - (positions.get(b.source)?.x ?? 0));
       sorted.forEach((e, i) => targetHandleByEdge.set(e.id, `tgt-${i}`));
     }
 
     return { sourceHandleByEdge, targetHandleByEdge, outputPortsById, inputPortsById };
-  }, [edgeList, positions, skipLaneXByEdge]);
+  }, [edgeList, positions, skipLaneXByEdge, hubLaneXByEdge, bypassEdgeIds, branchingHubEdgeIds]);
 
   // Selecting a node highlights its whole computational neighborhood
   // (every ancestor and descendant reachable through this view's edges)
@@ -664,7 +772,7 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
     // keep it inside rather than let it poke out past the border.
     for (const e of edgeList) {
       if (!memberSet.has(e.source) || !memberSet.has(e.target)) continue;
-      const laneX = skipLaneXByEdge.get(e.id) ?? detourByEdge.get(e.id);
+      const laneX = skipLaneXByEdge.get(e.id) ?? hubLaneXByEdge.get(e.id) ?? detourByEdge.get(e.id);
       if (laneX === undefined) continue;
       minX = Math.min(minX, laneX);
       maxX = Math.max(maxX, laneX);
@@ -680,7 +788,7 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
       zIndex: -1,
       data: { label: container.name, color: componentRegistry[container.type]?.color ?? "#6b7280" },
     };
-  }, [selectedId, nodeIds, model, positions, edgeList, skipLaneXByEdge, detourByEdge]);
+  }, [selectedId, nodeIds, model, positions, edgeList, skipLaneXByEdge, hubLaneXByEdge, detourByEdge]);
 
   const rfEdges: RFEdge[] = useMemo(
     () =>
@@ -694,20 +802,22 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
         const showShape = showTensorShapes && (e.id === hoveredEdgeId || e.source === selectedId || e.target === selectedId);
         const shapeDims = showShape ? model.nodes[e.source]?.outputs[0]?.dims : undefined;
         const skipLaneX = skipLaneXByEdge.get(e.id);
+        const hubLaneX = hubLaneXByEdge.get(e.id);
+        const isHub = hubLaneX !== undefined;
         const detourX = detourByEdge.get(e.id);
-        const laneX = skipLaneX ?? detourX;
+        const laneX = skipLaneX ?? hubLaneX ?? detourX;
         return {
           id: e.id,
           source: e.source,
           target: e.target,
-          sourceHandle: skipLaneX !== undefined ? "lane-out" : sourceHandleByEdge.get(e.id),
-          targetHandle: skipLaneX !== undefined ? "lane-in" : targetHandleByEdge.get(e.id),
-          type: skipLaneX !== undefined ? "lane" : detourX !== undefined ? "detour" : "smoothstep",
+          sourceHandle: skipLaneX !== undefined || isHub ? "lane-out" : sourceHandleByEdge.get(e.id),
+          targetHandle: skipLaneX !== undefined || isHub ? "lane-in" : targetHandleByEdge.get(e.id),
+          type: skipLaneX !== undefined || isHub ? "lane" : detourX !== undefined ? "detour" : "smoothstep",
           data: laneX !== undefined ? { laneX } : undefined,
           label: shapeDims?.length ? `[${shapeDims.join(", ")}]` : undefined,
-          markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: isSkip ? SKIP_EDGE_COLOR : EDGE_COLOR },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: isSkip ? SKIP_EDGE_COLOR : isHub ? HUB_EDGE_COLOR : EDGE_COLOR },
           style: {
-            stroke: isSkip ? SKIP_EDGE_COLOR : EDGE_COLOR,
+            stroke: isSkip ? SKIP_EDGE_COLOR : isHub ? HUB_EDGE_COLOR : EDGE_COLOR,
             strokeWidth: isSkip ? 2 : 1.5,
             // Dash length is defined in flow-space units, which the
             // current zoom then scales down further — at the zoom level
@@ -724,7 +834,7 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
           className: "graph-edge" + (dimmed ? " graph-edge-dimmed" : ""),
         };
       }),
-    [edgeList, hoveredEdgeId, selectedId, model, relatedIds, sourceHandleByEdge, targetHandleByEdge, showTensorShapes, skipLaneXByEdge, detourByEdge]
+    [edgeList, hoveredEdgeId, selectedId, model, relatedIds, sourceHandleByEdge, targetHandleByEdge, showTensorShapes, skipLaneXByEdge, hubLaneXByEdge, detourByEdge]
   );
 
   const handleNodeClick = useCallback(

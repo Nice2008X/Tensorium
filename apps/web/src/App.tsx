@@ -158,7 +158,14 @@ export function App() {
       <div className="app-loader-screen">
         <div className="top-right-controls">
           <SettingsButton open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
-          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} allowSyntheticForwardPass={allowSyntheticForwardPass} onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal} />
+          <SettingsPanel
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            theme={theme}
+            onThemeChange={setTheme}
+            allowSyntheticForwardPass={allowSyntheticForwardPass}
+            onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal}
+          />
         </div>
         {showRestoring ? (
           <div className="app-restoring">
@@ -334,7 +341,14 @@ export function App() {
         </div>
         <div className="control-group">
           <SettingsButton open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
-          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} allowSyntheticForwardPass={allowSyntheticForwardPass} onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal} />
+          <SettingsPanel
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            theme={theme}
+            onThemeChange={setTheme}
+            allowSyntheticForwardPass={allowSyntheticForwardPass}
+            onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal}
+          />
         </div>
       </div>
       <InferencePanel

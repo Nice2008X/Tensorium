@@ -243,11 +243,27 @@ export interface AttentionResult {
  * Scaled dot-product self-attention with a causal mask, GQA-aware (K/V
  * heads are repeated to match the number of query heads when
  * numKeyValueHeads < numHeads).
+ *
+ * `scale` defaults to the usual `1/sqrt(headDim)` — pass an explicit value
+ * for a model that deliberately departs from it (Gemma-4's text decoder
+ * fixes it at 1.0, relying on its Q/K RMSNorm instead). `slidingWindow`,
+ * when given, additionally masks out any key more than that many positions
+ * behind the query — on top of, not instead of, the causal mask — for a
+ * local/global hybrid attention pattern (also Gemma-4).
  */
-export function causalSelfAttention(q: Matrix, k: Matrix, v: Matrix, numHeads: number, numKeyValueHeads: number, headDim: number): AttentionResult {
+export function causalSelfAttention(
+  q: Matrix,
+  k: Matrix,
+  v: Matrix,
+  numHeads: number,
+  numKeyValueHeads: number,
+  headDim: number,
+  options?: { scale?: number; slidingWindow?: number }
+): AttentionResult {
   const S = q.length;
   const groupSize = numHeads / numKeyValueHeads;
-  const scale = 1 / Math.sqrt(headDim);
+  const scale = options?.scale ?? 1 / Math.sqrt(headDim);
+  const slidingWindow = options?.slidingWindow;
   const perHeadOutputs: Matrix[] = [];
   const attentionWeights: number[][][] = [];
 
@@ -259,7 +275,10 @@ export function causalSelfAttention(q: Matrix, k: Matrix, v: Matrix, numHeads: n
 
     const scores = matmul(qh, kh).map((row) => row.map((v2) => v2 * scale));
     for (let i = 0; i < S; i++) {
-      for (let j = i + 1; j < S; j++) scores[i][j] = -Infinity; // causal mask
+      for (let j = 0; j < S; j++) {
+        const outOfWindow = slidingWindow != null && i - j >= slidingWindow;
+        if (j > i || outOfWindow) scores[i][j] = -Infinity; // causal mask, plus the sliding window's lower bound when set
+      }
     }
     const weights = scores.map(softmaxRow);
     attentionWeights.push(weights);

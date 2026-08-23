@@ -11,6 +11,7 @@ import { OlmoAdapter } from "@tensorium/adapter-olmo";
 import { QwenMoeAdapter } from "@tensorium/adapter-qwen-moe";
 import { Qwen3MoeAdapter } from "@tensorium/adapter-qwen3-moe";
 import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
+import { Gemma4Adapter } from "@tensorium/adapter-gemma4";
 import { GenericAdapter } from "@tensorium/adapter-generic";
 
 /**
@@ -36,6 +37,15 @@ import { GenericAdapter } from "@tensorium/adapter-generic";
  * experts, unconditional always-on shared experts, optional group-limited
  * routing) are structurally different enough from GQA + Qwen-style MoE to
  * need their own graph/inference modules, the same way GPT-2 does.
+ * Gemma 4 is the same story again, and then some: it's a genuinely
+ * multimodal checkpoint (text + vision + audio towers in one file), of
+ * which this app only ever reads the text decoder — and that decoder
+ * alone has a fixed (non-1/√d) attention scale, two different head_dim/RoPE
+ * configurations alternating by layer, several trailing layers that reuse
+ * an earlier layer's frozen K/V instead of computing their own, a second
+ * "per-layer embedding" table injected into every layer, and a real
+ * learned per-layer output scalar — none of which fit adapter-llama-family
+ * at all.
  *
  * Every one of these is hand-verified: a human confirmed its exact
  * behavior against the real architecture before it shipped. GenericAdapter
@@ -60,6 +70,7 @@ export const NAMED_ADAPTERS: ModelAdapter[] = [
   QwenMoeAdapter,
   Qwen3MoeAdapter,
   DeepseekV2Adapter,
+  Gemma4Adapter,
 ];
 
 export { GenericAdapter };
@@ -113,6 +124,12 @@ export const PRESET_MODELS = [
     repo: "deepseek-ai/DeepSeek-V2-Lite",
     label: "DeepSeek-V2-Lite (real) · 27 layers, MLA, 64-expert DeepSeekMoE, sharded, 29.3 GB",
     isMoE: true,
+    isLarge: true,
+  },
+  {
+    repo: "google/gemma-4-E2B",
+    label: "Gemma 4 E2B (real, text-only) · 35 layers, sliding+global attention, per-layer embeddings, ~10 GB",
+    isMoE: false,
     isLarge: true,
   },
 ];
