@@ -76,8 +76,18 @@ function PortHandles({ kind, position, count }: { kind: "target" | "source"; pos
 
 function IRNodeComponent({ data }: { data: IRNodeData }) {
   const stacked = !!data.stackCount && data.stackCount > 1;
+  // An adapter can shorten a node's displayed name to fit its column (see
+  // .ir-node's max-width) while keeping the un-shortened name in
+  // metadata.fullName — when present, that's what the hover tooltip shows,
+  // so nothing named "X (Y)" actually loses the "(Y)" part, it just moves
+  // off the box and onto hover. Falls back to the label itself otherwise.
+  const fullName = (data.node?.metadata.fullName as string | undefined) ?? data.label;
   const card = (
-    <div className={"ir-node nopan nodrag" + (data.selected ? " selected" : "") + (data.dimmed ? " dimmed" : "")} style={{ borderColor: data.color }}>
+    <div
+      className={"ir-node nopan nodrag" + (data.selected ? " selected" : "") + (data.dimmed ? " dimmed" : "")}
+      style={{ borderColor: data.color }}
+      title={fullName}
+    >
       <PortHandles kind="target" position={Position.Top} count={data.inputPorts} />
       <div className="ir-node-label">
         {data.glyph && <span className="ir-node-glyph">{data.glyph}</span>}
@@ -255,11 +265,11 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
   // just browsing the architecture, so it stays opt-in rather than
   // appearing automatically whenever a node gets selected/hovered.
   const [showTensorShapes, setShowTensorShapes] = useLocalStorageState("panel:graph-tensor-shapes", false);
-  // Off by default: collapsing a repeated run (e.g. 5 near-identical
-  // Transformer Blocks) into one "× 5" node is a deliberate declutter step,
-  // not something that should silently hide blocks the user expects to see
-  // every time they open a model.
-  const [stackRepeats, setStackRepeats] = useLocalStorageState("panel:graph-stack-repeats", false);
+  // On by default: collapsing a repeated run (e.g. 5 near-identical
+  // Transformer Blocks) into one "× 5" node is the more readable starting
+  // view for most models — the toggle still lets anyone switch back to
+  // seeing every block individually.
+  const [stackRepeats, setStackRepeats] = useLocalStorageState("panel:graph-stack-repeats", true);
   const [exportingImage, setExportingImage] = useState(false);
 
   const { nodeIds: rawNodeIds, edgeList: rawEdgeList } = useMemo(() => {

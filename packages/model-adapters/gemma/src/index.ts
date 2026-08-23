@@ -1,5 +1,5 @@
 import type { LoadProgress, Model, ModelAdapter, ModelMetadata, ModelSource, WeightProvider } from "@tensorium/model-ir";
-import { SafetensorsWeightProvider } from "@tensorium/tensor-core";
+import { SafetensorsWeightProvider, SyntheticWeightProvider } from "@tensorium/tensor-core";
 import { loadSafetensorsMetadata } from "@tensorium/hf-client";
 import { buildModelConfig, buildGraph, runInference, type LlamaFamilyRawConfig } from "@tensorium/adapter-llama-family";
 
@@ -20,7 +20,7 @@ export const GemmaAdapter: ModelAdapter = {
   },
 
   async loadMetadata(source: ModelSource, onProgress?: (progress: LoadProgress) => void): Promise<ModelMetadata> {
-    const { rawConfig, weightIndex, weightsBuffer } = await loadSafetensorsMetadata<LlamaFamilyRawConfig>(source, onProgress);
+    const { rawConfig, weightIndex, weightsBuffer, structureOnly } = await loadSafetensorsMetadata<LlamaFamilyRawConfig>(source, onProgress);
 
     return {
       architecture: (rawConfig.architectures && rawConfig.architectures[0]) || "GemmaForCausalLM",
@@ -33,6 +33,7 @@ export const GemmaAdapter: ModelAdapter = {
       weightIndex,
       source,
       weightsBuffer,
+      structureOnly,
     };
   },
 
@@ -41,6 +42,7 @@ export const GemmaAdapter: ModelAdapter = {
   },
 
   getWeightProvider(metadata: ModelMetadata): WeightProvider {
+    if (metadata.structureOnly) return new SyntheticWeightProvider(PROVIDER_ID, metadata.weightIndex);
     if (!metadata.weightsBuffer) throw new Error("No weights buffer available on this metadata");
     return new SafetensorsWeightProvider(PROVIDER_ID, metadata.weightsBuffer);
   },

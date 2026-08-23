@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { InferenceState } from "../useInference.js";
 import { useTranslation } from "./LanguageContext.js";
+import { formatBytes } from "../format.js";
 
 interface Props {
   supported: boolean;
@@ -12,9 +13,37 @@ interface Props {
   onToggleCompare: () => void;
   promptBState: InferenceState;
   onRunB: (prompt: string) => void;
+  /** True when this model's real weights were never downloaded (structure-only) — the note stays visible (until dismissed) regardless of whether synthetic runs are currently allowed, so it's always clear these numbers aren't real. */
+  structureOnly: boolean;
+  /** True when structureOnly and the user hasn't opted into running against synthetic weights — Run/Run Prompt B/Compare all stay disabled until either changes. */
+  forwardPassBlocked: boolean;
+  onEnableForwardPass: () => void;
+  onDisableForwardPass: () => void;
+  /** Rough floor for how much browser memory running this model would hold once every layer's weights get cached — shown in the note so enabling (or leaving enabled) is an informed choice, not a leap in the dark. */
+  estimatedForwardPassBytes: number;
+  /** Hides the structure-only note for the current model only — reset by the caller whenever a different model loads. */
+  noteDismissed: boolean;
+  onDismissNote: () => void;
 }
 
-export function InferencePanel({ supported, state, onRun, selectedTokenIndex, onSelectToken, compareEnabled, onToggleCompare, promptBState, onRunB }: Props) {
+export function InferencePanel({
+  supported,
+  state,
+  onRun,
+  selectedTokenIndex,
+  onSelectToken,
+  compareEnabled,
+  onToggleCompare,
+  promptBState,
+  onRunB,
+  structureOnly,
+  forwardPassBlocked,
+  onEnableForwardPass,
+  onDisableForwardPass,
+  estimatedForwardPassBytes,
+  noteDismissed,
+  onDismissNote,
+}: Props) {
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState("The cat sat on the");
   const [promptB, setPromptB] = useState("The dog sat on the");
@@ -38,13 +67,31 @@ export function InferencePanel({ supported, state, onRun, selectedTokenIndex, on
       >
         <span className="inference-label">{t("inference.promptA")}</span>
         <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("inference.placeholderA")} />
-        <button type="submit" disabled={state.status === "running"}>
+        <button type="submit" disabled={state.status === "running" || forwardPassBlocked}>
           {state.status === "running" ? t("inference.running") : t("inference.run")}
         </button>
-        <button type="button" className="compare-toggle" onClick={onToggleCompare}>
+        <button
+          type="button"
+          className="compare-toggle"
+          onClick={onToggleCompare}
+          disabled={forwardPassBlocked}
+          title={forwardPassBlocked ? t("inference.structureOnlyBlocked").replace("{memory}", formatBytes(estimatedForwardPassBytes)) : undefined}
+        >
           {compareEnabled ? t("inference.hidePromptB") : t("inference.comparePromptB")}
         </button>
       </form>
+
+      {structureOnly && !noteDismissed && (
+        <div className="inference-structure-only-note">
+          <span>{t("inference.structureOnlyBlocked").replace("{memory}", formatBytes(estimatedForwardPassBytes))}</span>
+          <button type="button" onClick={forwardPassBlocked ? onEnableForwardPass : onDisableForwardPass}>
+            {forwardPassBlocked ? t("inference.enableSyntheticForwardPass") : t("inference.disableSyntheticForwardPass")}
+          </button>
+          <button type="button" className="inference-structure-only-note-close" onClick={onDismissNote} aria-label={t("inference.dismissNote")} title={t("inference.dismissNote")}>
+            ×
+          </button>
+        </div>
+      )}
 
       {state.status === "error" && <div className="inference-error">{state.error}</div>}
 
@@ -73,7 +120,7 @@ export function InferencePanel({ supported, state, onRun, selectedTokenIndex, on
         >
           <span className="inference-label">{t("inference.promptB")}</span>
           <input value={promptB} onChange={(e) => setPromptB(e.target.value)} placeholder={t("inference.placeholderB")} />
-          <button type="submit" disabled={promptBState.status === "running"}>
+          <button type="submit" disabled={promptBState.status === "running" || forwardPassBlocked}>
             {promptBState.status === "running" ? t("inference.running") : t("inference.runB")}
           </button>
         </form>

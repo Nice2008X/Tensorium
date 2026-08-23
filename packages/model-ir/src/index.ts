@@ -162,6 +162,18 @@ export interface ModelMetadata {
   source: ModelSource;
   /** Raw bytes backing the WeightProvider this metadata will build, if already fetched. */
   weightsBuffer?: ArrayBuffer;
+  /**
+   * Set when this checkpoint's real weight bytes were deliberately never
+   * downloaded — either because the checkpoint is too large (see
+   * hf-client's STRUCTURE_ONLY_THRESHOLD_BYTES) or sharded (this app's
+   * eager loader only ever fetches a single model.safetensors, so a
+   * sharded checkpoint of any size has no eager path). `weightIndex` still
+   * has every real tensor's true shape/dtype in this case — only the
+   * actual numbers are synthetic — so the architecture graph is completely
+   * real; getWeightProvider() must return a SyntheticWeightProvider
+   * instead of a SafetensorsWeightProvider when this is true.
+   */
+  structureOnly?: boolean;
 }
 
 /**
@@ -217,7 +229,7 @@ export interface Intervention {
  * isn't guaranteed in general, so consumers must treat it as optional.
  */
 export interface LoadProgress {
-  phase: "config" | "weights" | "parsing" | "building" | "tokenizer";
+  phase: "config" | "structure" | "weights" | "parsing" | "building" | "tokenizer";
   loadedBytes?: number;
   totalBytes?: number;
 }

@@ -5,6 +5,7 @@ import type { TranslationKey } from "../i18n.js";
 
 const PHASE_LABEL_KEY: Record<LoadProgress["phase"], TranslationKey> = {
   config: "loader.progress.config",
+  structure: "loader.progress.structure",
   weights: "loader.progress.weights",
   parsing: "loader.progress.parsing",
   building: "loader.progress.building",

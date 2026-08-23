@@ -17,6 +17,8 @@ interface Props {
   promptBInference?: InferenceState;
   /** A one-shot request to switch the Weights/Activations source tab — e.g. from the Inspector's "View activation"/"View weights" quick actions. Bump `nonce` on every request so a repeat click of the same source still re-applies (a user may have since clicked to a different tab themselves). */
   sourceRequest?: { value: "weights" | "activations"; nonce: number } | null;
+  /** True when weightProvider is a SyntheticWeightProvider — every value shown below (weights, and any activation, since those come from a forward pass over the same fabricated weights) is randomly generated, not real. */
+  structureOnly?: boolean;
 }
 
 interface ParamEntry {
@@ -44,7 +46,7 @@ function formatBytes(n: number): string {
   return `${n} B`;
 }
 
-export function TensorExplorer({ model, weightProvider, selectedNode, inference, selectedTokenIndex, promptBInference, sourceRequest }: Props) {
+export function TensorExplorer({ model, weightProvider, selectedNode, inference, selectedTokenIndex, promptBInference, sourceRequest, structureOnly }: Props) {
   const allParams = useMemo<ParamEntry[]>(() => {
     const list: ParamEntry[] = [];
     for (const node of Object.values(model.nodes)) {
@@ -225,6 +227,11 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
               <span>dtype {ref.dtype}</span>
               <span>{ref.numElements.toLocaleString()} params (full tensor)</span>
               <span>{formatBytes(ref.bytes)} (full tensor)</span>
+              {structureOnly && (
+                <span className="synthetic-badge" title="This checkpoint's real weights were never downloaded (too large or sharded) — these values are randomly generated, not real.">
+                  Synthetic
+                </span>
+              )}
               {tensor && (
                 <span className="loaded-badge" title="Bytes actually pulled into the browser for the window currently shown">
                   {formatBytes(loadedBytes)} loaded ({((loadedBytes / ref.bytes) * 100 || 0).toFixed(1)}% of tensor)
@@ -240,6 +247,11 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
               <span>Shape {activationTensor.shape.join(" × ")}</span>
               <span>dtype {activationTensor.dtype}</span>
               <span>from prompt: "{inference?.displayTokens?.join("")}"</span>
+              {structureOnly && (
+                <span className="synthetic-badge" title="Computed from randomly generated weights (this checkpoint's real weights were never downloaded) — not a real forward pass.">
+                  Synthetic
+                </span>
+              )}
             </div>
           </div>
         )}
