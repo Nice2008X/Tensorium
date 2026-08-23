@@ -527,6 +527,34 @@ input, select { font-family: inherit; }
   color: white;
 }
 .save-model-dialog-confirm:hover { background: var(--accent-hover); }
+.unknown-model-dialog-detected {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  background: var(--bg-chip);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+.unknown-model-dialog-detected-label { color: var(--text-tertiary); flex-shrink: 0; }
+.unknown-model-dialog-detected-value { font-family: ui-monospace, monospace; color: var(--text-primary); overflow-wrap: anywhere; }
+/* Styled like the "Enable anyway" action in the structure-only forward-pass
+   note (same warning color) rather than the accent color Save Model's
+   confirm button uses — this is the riskier, non-default choice, and
+   should read that way, not as the dialog's primary action. */
+.unknown-model-dialog-confirm {
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  transition: background-color var(--transition-fast);
+}
+.unknown-model-dialog-confirm:hover { background: var(--warning); color: var(--bg-base); }
 
 /* --- Settings button + panel --- */
 .settings-toggle-btn {

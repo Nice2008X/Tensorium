@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LoadProgress, Model, ModelAdapter, ModelMetadata, ModelSource, WeightProvider } from "@tensorium/model-ir";
-import { fetchArrayBuffer, hfResolveUrl, peekModelType } from "@tensorium/hf-client";
+import { fetchArrayBuffer, hfResolveUrl, peekModelType, type HfConfigPreview } from "@tensorium/hf-client";
 import { loadTokenizer, type Tokenizer } from "@tensorium/tokenizer";
-import { ADAPTERS } from "./adapters.js";
+import { NAMED_ADAPTERS, GenericAdapter } from "./adapters.js";
 
 /**
  * Remembers the last Hugging-Face-sourced model across a page reload, so
@@ -40,7 +40,7 @@ export interface ModelRawFiles {
 }
 
 export interface ModelState {
-  status: "idle" | "loading" | "ready" | "error";
+  status: "idle" | "loading" | "confirm-unknown" | "ready" | "error";
   error?: string;
   model?: Model;
   metadata?: ModelMetadata;
@@ -50,6 +50,9 @@ export interface ModelState {
   /** Present only if the repo ships a tokenizer.json this app understands — inference/activation features need it, static architecture browsing doesn't. */
   tokenizer?: Tokenizer;
   rawFiles?: ModelRawFiles;
+  /** Set only during "confirm-unknown": the source/preview waiting on the user's yes/no in UnknownModelDialog before GenericAdapter ever touches it. */
+  pendingSource?: ModelSource;
+  pendingPreview?: HfConfigPreview;
 }
 
 /** config.json/tokenizer.json are small — a Hugging Face source hits the IndexedDB cache (already populated by loadMetadata/loadTokenizer above, so this is free) and a local source just reads the file it already has in memory. Missing/failed reads (e.g. no tokenizer.json) resolve to undefined rather than failing the whole load. */
@@ -76,23 +79,15 @@ export function useModel() {
   const [restoring, setRestoring] = useState<boolean>(() => !!readPersistedRepo());
   const [progress, setProgress] = useState<LoadProgress | undefined>(undefined);
 
-  const loadFromSource = useCallback(async (source: ModelSource) => {
+  // The actual fetch-metadata/build-graph/load-tokenizer sequence, once an
+  // adapter has already been decided — shared by the normal (named-adapter)
+  // path and by confirmUnknownModel's GenericAdapter continuation below, so
+  // there's exactly one place that knows how to turn "a source + an
+  // adapter" into a ready model.
+  const loadWithAdapter = useCallback(async (source: ModelSource, adapter: ModelAdapter) => {
     setState({ status: "loading" });
     setProgress({ phase: "config" });
     try {
-      // Read just enough of config.json to know what kind of model this is,
-      // *before* any adapter commits to fetching (and possibly misreading)
-      // its weights. This is the actual extension point for "lots of
-      // different LLM models": each adapter only has to answer canLoad()
-      // correctly for its own architecture — nothing else here changes.
-      const preview = await peekModelType(source);
-      const adapter = ADAPTERS.find((a) => a.canLoad(source, preview));
-      if (!adapter) {
-        throw new Error(
-          `No adapter registered for model_type "${preview.model_type ?? "unknown"}" (architectures: ${(preview.architectures ?? []).join(", ") || "none"}).`
-        );
-      }
-
       const metadata = await adapter.loadMetadata(source, setProgress);
       setProgress({ phase: "building" });
       const model = adapter.buildGraph(metadata);
@@ -125,6 +120,58 @@ export function useModel() {
       setProgress(undefined);
     }
   }, []);
+
+  const loadFromSource = useCallback(
+    async (source: ModelSource) => {
+      setState({ status: "loading" });
+      setProgress({ phase: "config" });
+      try {
+        // Read just enough of config.json to know what kind of model this
+        // is, *before* any adapter commits to fetching (and possibly
+        // misreading) its weights. Named adapters are tried first, in the
+        // order apps/web/src/adapters.ts registers them — each only has to
+        // answer canLoad() correctly for its own architecture. Only when
+        // *none* of them recognize it does GenericAdapter even enter the
+        // picture, and even then it doesn't load anything yet — it just
+        // means there's a best-effort option, which the user has to
+        // explicitly accept (see confirmUnknownModel) before any of its
+        // code runs.
+        const preview = await peekModelType(source);
+        const namedAdapter = NAMED_ADAPTERS.find((a) => a.canLoad(source, preview));
+        if (namedAdapter) {
+          await loadWithAdapter(source, namedAdapter);
+          return;
+        }
+        if (!GenericAdapter.canLoad(source, preview)) {
+          throw new Error(
+            `No adapter registered for model_type "${preview.model_type ?? "unknown"}" (architectures: ${(preview.architectures ?? []).join(", ") || "none"}).`
+          );
+        }
+        setProgress(undefined);
+        setState({ status: "confirm-unknown", pendingSource: source, pendingPreview: preview });
+      } catch (err) {
+        setState({ status: "error", error: err instanceof Error ? err.message : String(err) });
+        setProgress(undefined);
+      }
+    },
+    [loadWithAdapter]
+  );
+
+  // The user's answer to UnknownModelDialog. `proceed: false` (or Escape/
+  // backdrop-click, which the dialog also routes here) just drops back to
+  // the loader with nothing loaded — same as never having typed that repo
+  // in at all.
+  const confirmUnknownModel = useCallback(
+    (proceed: boolean) => {
+      if (state.status !== "confirm-unknown" || !state.pendingSource) return;
+      if (proceed) {
+        loadWithAdapter(state.pendingSource, GenericAdapter);
+      } else {
+        setState({ status: "idle" });
+      }
+    },
+    [state, loadWithAdapter]
+  );
 
   const load = useCallback((repo: string) => loadFromSource({ kind: "huggingface", repo: repo.trim() }), [loadFromSource]);
 
@@ -168,5 +215,5 @@ export function useModel() {
     loadFromSource({ kind: "huggingface", repo }).finally(() => setRestoring(false));
   }, [loadFromSource]);
 
-  return { state, load, loadLocalFiles, reset, restoring, progress };
+  return { state, load, loadLocalFiles, reset, restoring, progress, confirmUnknownModel };
 }

@@ -11,6 +11,7 @@ import { OlmoAdapter } from "@tensorium/adapter-olmo";
 import { QwenMoeAdapter } from "@tensorium/adapter-qwen-moe";
 import { Qwen3MoeAdapter } from "@tensorium/adapter-qwen3-moe";
 import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
+import { GenericAdapter } from "@tensorium/adapter-generic";
 
 /**
  * Every architecture the explorer supports. Adding a new one means writing
@@ -35,8 +36,18 @@ import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
  * experts, unconditional always-on shared experts, optional group-limited
  * routing) are structurally different enough from GQA + Qwen-style MoE to
  * need their own graph/inference modules, the same way GPT-2 does.
+ *
+ * Every one of these is hand-verified: a human confirmed its exact
+ * behavior against the real architecture before it shipped. GenericAdapter
+ * (registered separately, not in this list — see useModel.ts) is the
+ * opposite: a checkpoint no adapter here recognizes can still be loaded by
+ * *detecting* the same options a named adapter would otherwise hand-code,
+ * off the checkpoint's own weight names — but only after the user
+ * explicitly confirms a best-effort load in the UnknownModelDialog, since
+ * detection can't catch everything a human reviewing the real modeling
+ * code would (see adapter-generic's own doc comment for specifics).
  */
-export const ADAPTERS: ModelAdapter[] = [
+export const NAMED_ADAPTERS: ModelAdapter[] = [
   GPT2Adapter,
   LlamaAdapter,
   MistralAdapter,
@@ -50,6 +61,8 @@ export const ADAPTERS: ModelAdapter[] = [
   Qwen3MoeAdapter,
   DeepseekV2Adapter,
 ];
+
+export { GenericAdapter };
 
 // NOTE: for a checkpoint small enough to fit comfortably in a browser tab
 // (a few hundred KB to a few MB — every preset below except the "isLarge"

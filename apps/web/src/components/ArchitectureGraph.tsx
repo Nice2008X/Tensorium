@@ -78,15 +78,19 @@ function IRNodeComponent({ data }: { data: IRNodeData }) {
   const stacked = !!data.stackCount && data.stackCount > 1;
   // An adapter can shorten a node's displayed name to fit its column (see
   // .ir-node's max-width) while keeping the un-shortened name in
-  // metadata.fullName — when present, that's what the hover tooltip shows,
-  // so nothing named "X (Y)" actually loses the "(Y)" part, it just moves
-  // off the box and onto hover. Falls back to the label itself otherwise.
-  const fullName = (data.node?.metadata.fullName as string | undefined) ?? data.label;
+  // metadata.fullName — when it's actually longer/different from what's
+  // shown, that's what the hover tooltip reveals, so nothing named "X (Y)"
+  // actually loses the "(Y)" part, it just moves off the box and onto
+  // hover. No tooltip at all when there's nothing extra to reveal — most
+  // nodes' full name is identical to their label, and a tooltip that just
+  // repeats the visible text on every single node is noise, not help.
+  const fullName = data.node?.metadata.fullName as string | undefined;
+  const tooltip = fullName && fullName !== data.label ? fullName : undefined;
   const card = (
     <div
       className={"ir-node nopan nodrag" + (data.selected ? " selected" : "") + (data.dimmed ? " dimmed" : "")}
       style={{ borderColor: data.color }}
-      title={fullName}
+      title={tooltip}
     >
       <PortHandles kind="target" position={Position.Top} count={data.inputPorts} />
       <div className="ir-node-label">

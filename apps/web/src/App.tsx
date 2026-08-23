@@ -11,6 +11,7 @@ import { ModelLoader } from "./components/ModelLoader.js";
 import { LoadProgressBar } from "./components/LoadProgressBar.js";
 import { LoadModelPanel } from "./components/LoadModelPanel.js";
 import { SaveModelDialog, type SaveModelFile } from "./components/SaveModelDialog.js";
+import { UnknownModelDialog } from "./components/UnknownModelDialog.js";
 import { ModelInfoBar } from "./components/ModelInfoBar.js";
 import { ModelTree } from "./components/ModelTree.js";
 import { ArchitectureGraph, type GraphView } from "./components/ArchitectureGraph.js";
@@ -56,7 +57,7 @@ function containingBlockId(model: Model, nodeId: string): string | null {
 }
 
 export function App() {
-  const { state, load, loadLocalFiles, reset, restoring, progress } = useModel();
+  const { state, load, loadLocalFiles, reset, restoring, progress, confirmUnknownModel } = useModel();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -166,8 +167,21 @@ export function App() {
             {progress && <LoadProgressBar progress={progress} />}
           </div>
         ) : (
-          <ModelLoader status={state.status} error={state.error} progress={progress} onLoad={load} onLoadLocal={loadLocalFiles} />
+          <ModelLoader
+            status={state.status === "confirm-unknown" ? "loading" : state.status}
+            error={state.error}
+            progress={progress}
+            onLoad={load}
+            onLoadLocal={loadLocalFiles}
+          />
         )}
+        <UnknownModelDialog
+          open={state.status === "confirm-unknown"}
+          modelType={state.pendingPreview?.model_type}
+          architectures={state.pendingPreview?.architectures}
+          onCancel={() => confirmUnknownModel(false)}
+          onConfirm={() => confirmUnknownModel(true)}
+        />
       </div>
     );
   }
@@ -295,7 +309,7 @@ export function App() {
 
   return (
     <div className={"app" + (analysisBusy ? " app-busy" : "") + (resizingBottom ? " app-resizing-panel" : "")}>
-      <ModelInfoBar model={model} structureOnly={structureOnly} />
+      <ModelInfoBar model={model} structureOnly={structureOnly} bestEffort={state.adapter?.id === "generic"} />
       <div className="top-right-controls">
         <div className="control-group">
           <button className="close-model" onClick={reset} title={t("app.closeModel")}>

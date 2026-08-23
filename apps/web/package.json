@@ -11,6 +11,7 @@
   "dependencies": {
     "@tensorium/adapter-deepseek-v2": "*",
     "@tensorium/adapter-gemma": "*",
+    "@tensorium/adapter-generic": "*",
     "@tensorium/adapter-glm4": "*",
     "@tensorium/adapter-gpt2": "*",
     "@tensorium/adapter-llama": "*",
