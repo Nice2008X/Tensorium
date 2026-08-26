@@ -431,10 +431,22 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
         const targetX = positions.get(e.target)?.x ?? 0;
         let obLeft = Infinity;
         let obRight = -Infinity;
+        // Obstacle search includes the source's and target's *own* ranks
+        // (>=/<=, not the strictly-between >/< that spanOf itself uses to
+        // decide whether a detour is needed at all) because the jog's
+        // horizontal run happens right at those ranks' boundary — only
+        // `clear` (20px) below the source row and above the target row, not
+        // fully outside them. A sibling sitting in that same boundary rank
+        // (e.g. Qwen3.5's QKV Projection beside β/Decay Gate Projection,
+        // which detour past it to reach the shared gated RMSNorm) still has
+        // its own ordinary edge transiting straight down through that exact
+        // band, and a real bug — the β/Decay detour's jog crossing right
+        // through QKV Projection's own outgoing edge — showed this wasn't
+        // being cleared before.
         for (const id of nodeIds) {
           if (id === e.source || id === e.target) continue;
           const p = positions.get(id);
-          if (p && p.y > span.lo && p.y < span.hi) {
+          if (p && p.y >= span.lo && p.y <= span.hi) {
             obLeft = Math.min(obLeft, p.x - NOMINAL_NODE_WIDTH / 2);
             obRight = Math.max(obRight, p.x + NOMINAL_NODE_WIDTH / 2);
           }

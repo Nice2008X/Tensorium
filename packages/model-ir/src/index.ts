@@ -18,6 +18,7 @@ export type NodeType =
   | "layer_norm"
   | "rms_norm"
   | "attention"
+  | "linear_attention"
   | "q_projection"
   | "k_projection"
   | "v_projection"

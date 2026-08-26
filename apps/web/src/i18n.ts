@@ -99,6 +99,7 @@ const en = {
   "settings.language": "Language",
   "settings.structureOnlyForwardPass": "Allow forward pass on structure-only models",
   "settings.structureOnlyForwardPassDesc": "Runs against randomly generated weights instead of blocking — real weights for large or sharded checkpoints are never downloaded.",
+  "settings.structureOnlyForwardPassDisabledDesc": "Disabled for the currently loaded model — its real weights exceed 20GB, large enough that a synthetic forward pass would almost certainly freeze or crash the tab.",
   "settings.close": "Close settings",
 
   "theme.colorTheme": "Color theme",
@@ -199,6 +200,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "语言",
     "settings.structureOnlyForwardPass": "允许在仅结构模型上运行前向传播",
     "settings.structureOnlyForwardPassDesc": "将使用随机生成的权重运行，而不是直接禁止——大型或分片的模型权重从不会被下载。",
+    "settings.structureOnlyForwardPassDisabledDesc": "当前加载的模型已禁用此选项——其真实权重超过 20GB，规模过大，合成前向传播几乎必定会导致标签页卡死或崩溃。",
     "settings.close": "关闭设置",
 
     "theme.colorTheme": "配色主题",
@@ -294,6 +296,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "Idioma",
     "settings.structureOnlyForwardPass": "Permitir pase hacia adelante en modelos de solo estructura",
     "settings.structureOnlyForwardPassDesc": "Se ejecuta con pesos generados aleatoriamente en lugar de bloquearse — los pesos reales de los checkpoints grandes o fragmentados nunca se descargan.",
+    "settings.structureOnlyForwardPassDisabledDesc": "Deshabilitado para el modelo actualmente cargado — sus pesos reales superan los 20GB, un tamaño lo bastante grande como para que un pase hacia adelante sintético casi con toda seguridad congele o haga fallar la pestaña.",
     "settings.close": "Cerrar configuración",
 
     "theme.colorTheme": "Tema de color",
@@ -389,6 +392,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "Langue",
     "settings.structureOnlyForwardPass": "Autoriser la passe avant sur les modèles structure seule",
     "settings.structureOnlyForwardPassDesc": "S'exécute avec des poids générés aléatoirement plutôt que d'être bloqué — les poids réels des points de contrôle volumineux ou fragmentés ne sont jamais téléchargés.",
+    "settings.structureOnlyForwardPassDisabledDesc": "Désactivé pour le modèle actuellement chargé — ses poids réels dépassent 20 Go, une taille suffisante pour qu'une passe avant synthétique fasse presque certainement geler ou planter l'onglet.",
     "settings.close": "Fermer les paramètres",
 
     "theme.colorTheme": "Thème de couleur",
@@ -484,6 +488,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "Sprache",
     "settings.structureOnlyForwardPass": "Forward Pass bei reinen Struktur-Modellen erlauben",
     "settings.structureOnlyForwardPassDesc": "Läuft mit zufällig generierten Gewichten statt blockiert zu werden — echte Gewichte für große oder aufgeteilte Checkpoints werden nie heruntergeladen.",
+    "settings.structureOnlyForwardPassDisabledDesc": "Für das aktuell geladene Modell deaktiviert — seine echten Gewichte überschreiten 20 GB, groß genug, dass ein synthetischer Forward Pass den Tab mit ziemlicher Sicherheit einfrieren oder abstürzen lassen würde.",
     "settings.close": "Einstellungen schließen",
 
     "theme.colorTheme": "Farbdesign",
@@ -579,6 +584,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "言語",
     "settings.structureOnlyForwardPass": "構造のみのモデルでの順伝播を許可",
     "settings.structureOnlyForwardPassDesc": "ブロックする代わりに、ランダムに生成された重みを使って実行します — 大規模または分割されたチェックポイントの実際の重みはダウンロードされません。",
+    "settings.structureOnlyForwardPassDisabledDesc": "現在読み込まれているモデルでは無効です — 実際の重みが20GBを超えており、この規模では合成順伝播を実行するとほぼ確実にタブがフリーズまたはクラッシュします。",
     "settings.close": "設定を閉じる",
 
     "theme.colorTheme": "カラーテーマ",
@@ -674,6 +680,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "언어",
     "settings.structureOnlyForwardPass": "구조만 있는 모델에서 순전파 허용",
     "settings.structureOnlyForwardPassDesc": "차단하는 대신 무작위로 생성된 가중치로 실행합니다 — 크거나 분할된 체크포인트의 실제 가중치는 다운로드되지 않습니다.",
+    "settings.structureOnlyForwardPassDisabledDesc": "현재 로드된 모델에서는 비활성화되어 있습니다 — 실제 가중치가 20GB를 초과하며, 이 정도 규모에서는 합성 순전파를 실행하면 탭이 거의 확실히 멈추거나 충돌합니다.",
     "settings.close": "설정 닫기",
 
     "theme.colorTheme": "색상 테마",
@@ -769,6 +776,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "Idioma",
     "settings.structureOnlyForwardPass": "Permitir passagem direta em modelos somente estrutura",
     "settings.structureOnlyForwardPassDesc": "Executa com pesos gerados aleatoriamente em vez de bloquear — os pesos reais de checkpoints grandes ou fragmentados nunca são baixados.",
+    "settings.structureOnlyForwardPassDisabledDesc": "Desativado para o modelo atualmente carregado — seus pesos reais excedem 20GB, tamanho grande o suficiente para que uma passagem direta sintética quase certamente trave ou falhe a aba.",
     "settings.close": "Fechar configurações",
 
     "theme.colorTheme": "Tema de cor",
@@ -864,6 +872,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "settings.language": "Язык",
     "settings.structureOnlyForwardPass": "Разрешить прямой проход для моделей только со структурой",
     "settings.structureOnlyForwardPassDesc": "Выполняется со случайно сгенерированными весами вместо блокировки — реальные веса больших или разбитых на части чекпоинтов никогда не загружаются.",
+    "settings.structureOnlyForwardPassDisabledDesc": "Отключено для текущей загруженной модели — её реальные веса превышают 20 ГБ, что достаточно много, чтобы синтетический прямой проход почти наверняка завис или обрушил вкладку.",
     "settings.close": "Закрыть настройки",
 
     "theme.colorTheme": "Цветовая тема",

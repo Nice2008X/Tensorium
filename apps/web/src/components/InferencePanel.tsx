@@ -17,6 +17,8 @@ interface Props {
   structureOnly: boolean;
   /** True when structureOnly and the user hasn't opted into running against synthetic weights — Run/Run Prompt B/Compare all stay disabled until either changes. */
   forwardPassBlocked: boolean;
+  /** True when this model's real weight bytes exceed the hard 20GB ceiling — forwardPassBlocked is then always true regardless of the setting, and the "Enable anyway" action is hidden entirely rather than offering a toggle that can't actually help. */
+  oversizedForForwardPass: boolean;
   onEnableForwardPass: () => void;
   onDisableForwardPass: () => void;
   /** Rough floor for how much browser memory running this model would hold once every layer's weights get cached — shown in the note so enabling (or leaving enabled) is an informed choice, not a leap in the dark. */
@@ -38,6 +40,7 @@ export function InferencePanel({
   onRunB,
   structureOnly,
   forwardPassBlocked,
+  oversizedForForwardPass,
   onEnableForwardPass,
   onDisableForwardPass,
   estimatedForwardPassBytes,
@@ -84,9 +87,11 @@ export function InferencePanel({
       {structureOnly && !noteDismissed && (
         <div className="inference-structure-only-note">
           <span>{t("inference.structureOnlyBlocked").replace("{memory}", formatBytes(estimatedForwardPassBytes))}</span>
-          <button type="button" onClick={forwardPassBlocked ? onEnableForwardPass : onDisableForwardPass}>
-            {forwardPassBlocked ? t("inference.enableSyntheticForwardPass") : t("inference.disableSyntheticForwardPass")}
-          </button>
+          {!oversizedForForwardPass && (
+            <button type="button" onClick={forwardPassBlocked ? onEnableForwardPass : onDisableForwardPass}>
+              {forwardPassBlocked ? t("inference.enableSyntheticForwardPass") : t("inference.disableSyntheticForwardPass")}
+            </button>
+          )}
           <button type="button" className="inference-structure-only-note-close" onClick={onDismissNote} aria-label={t("inference.dismissNote")} title={t("inference.dismissNote")}>
             ×
           </button>

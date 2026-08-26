@@ -12,6 +12,7 @@ import { QwenMoeAdapter } from "@tensorium/adapter-qwen-moe";
 import { Qwen3MoeAdapter } from "@tensorium/adapter-qwen3-moe";
 import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
 import { Gemma4Adapter } from "@tensorium/adapter-gemma4";
+import { Qwen35Adapter } from "@tensorium/adapter-qwen3-5";
 import { GenericAdapter } from "@tensorium/adapter-generic";
 
 /**
@@ -46,6 +47,15 @@ import { GenericAdapter } from "@tensorium/adapter-generic";
  * "per-layer embedding" table injected into every layer, and a real
  * learned per-layer output scalar — none of which fit adapter-llama-family
  * at all.
+ * Qwen3.5/Qwen3.8 (model_type "qwen3_5") also gets its own package, for a
+ * different reason: it's a *hybrid* decoder where most layers are a
+ * linear/recurrent Gated DeltaNet mechanism (a short causal conv feeding a
+ * per-token recurrent state update — the "delta rule" — nothing like
+ * softmax attention) interleaved with periodic ordinary GQA layers, and
+ * both layer kinds gate their output through a learned sigmoid/SiLU gate.
+ * It's also multimodal (text + vision tower + an optional multi-token-
+ * prediction head), handled the same way Gemma 4's vision/audio towers
+ * are: this adapter reads the text decoder only.
  *
  * Every one of these is hand-verified: a human confirmed its exact
  * behavior against the real architecture before it shipped. GenericAdapter
@@ -71,6 +81,7 @@ export const NAMED_ADAPTERS: ModelAdapter[] = [
   Qwen3MoeAdapter,
   DeepseekV2Adapter,
   Gemma4Adapter,
+  Qwen35Adapter,
 ];
 
 export { GenericAdapter };
@@ -104,6 +115,7 @@ export const PRESET_MODELS = [
     isMoE: true,
     isLarge: false,
   },
+  { repo: "tiny-random/qwen3.5", label: "Qwen3.5 · tiny-random/qwen3.5 (4 layers, 3 Gated DeltaNet + 1 GQA, gated output)", isMoE: false, isLarge: false },
   // Real, full-size checkpoints — structure-only (see the note above): the
   // architecture graph and every tensor's true shape/dtype are exact, but
   // no real weight bytes are ever downloaded, so a forward pass on these
@@ -129,6 +141,12 @@ export const PRESET_MODELS = [
   {
     repo: "google/gemma-4-E2B",
     label: "Gemma 4 E2B (real, text-only) · 35 layers, sliding+global attention, per-layer embeddings, ~10 GB",
+    isMoE: false,
+    isLarge: true,
+  },
+  {
+    repo: "Qwen/Qwen3.8-27B",
+    label: "Qwen3.8-27B (real, text-only) · 64 layers, 48 Gated DeltaNet + 16 GQA, sharded, ~55 GB",
     isMoE: false,
     isLarge: true,
   },

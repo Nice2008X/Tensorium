@@ -30,6 +30,9 @@ const BOTTOM_PANEL_MIN_HEIGHT = 160;
 /** Leaves at least this much vertical space for the tree/graph/inspector row above, however tall the window is. */
 const BOTTOM_PANEL_TOP_RESERVE = 240;
 
+/** Real (on-disk) weight-byte ceiling past which a structure-only model's synthetic forward pass is refused outright, not just opt-in-gated — see `oversizedForForwardPass` below. */
+const MAX_FORWARD_PASS_WEIGHT_BYTES = 20 * 1024 ** 3;
+
 function computeActivationMagnitude(t: Tensor): number {
   let sum = 0;
   for (let i = 0; i < t.data.length; i++) sum += t.data[i] * t.data[i];
@@ -195,7 +198,13 @@ export function App() {
 
   const model = state.model;
   const structureOnly = state.metadata?.structureOnly === true;
-  const forwardPassBlocked = structureOnly && !allowSyntheticForwardPass;
+  // Beyond this many real (on-disk) weight bytes, a synthetic forward pass
+  // isn't just gated behind opt-in, it's refused outright: at 4x that in
+  // materialized Float64Array weights (see estimatedForwardPassBytes below),
+  // the tab is essentially guaranteed to freeze or crash, so there's no
+  // responsible "enable anyway" for a checkpoint this large.
+  const oversizedForForwardPass = structureOnly && totalParameterBytes(model) > MAX_FORWARD_PASS_WEIGHT_BYTES;
+  const forwardPassBlocked = structureOnly && (oversizedForForwardPass || !allowSyntheticForwardPass);
   // Rough floor, not a precise prediction: every tensor this app touches is
   // materialized as a Float64Array (8 bytes/element) regardless of its
   // on-disk dtype (BF16/F16 = 2 bytes/element on every structure-only preset
@@ -348,6 +357,7 @@ export function App() {
             onThemeChange={setTheme}
             allowSyntheticForwardPass={allowSyntheticForwardPass}
             onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal}
+            forwardPassSettingDisabled={oversizedForForwardPass}
           />
         </div>
       </div>
@@ -363,6 +373,7 @@ export function App() {
         onRunB={promptB.run}
         structureOnly={structureOnly}
         forwardPassBlocked={forwardPassBlocked}
+        oversizedForForwardPass={oversizedForForwardPass}
         onEnableForwardPass={() => setAllowSyntheticForwardPassAndReveal(true)}
         onDisableForwardPass={() => setAllowSyntheticForwardPass(false)}
         estimatedForwardPassBytes={estimatedForwardPassBytes}

@@ -627,6 +627,7 @@ input, select { font-family: inherit; }
 }
 .settings-language-select:focus-visible { border-color: var(--accent); }
 .settings-checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-primary); cursor: pointer; }
+.settings-checkbox-row.disabled { cursor: default; opacity: 0.6; }
 .settings-section-desc { margin-top: 4px; font-size: 11px; color: var(--text-tertiary); line-height: 1.5; }
 
 /* --- Theme switcher --- */
