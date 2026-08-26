@@ -80,11 +80,16 @@ export interface ModelNode {
   metadata: Record<string, unknown>;
 }
 
+/** Closed classification of what an edge represents, driving both layout (routing lane, port order) and rendering (style). Defaults to "data" wherever unset — every adapter predates this field. */
+export type EdgeKind = "data" | "residual" | "gate" | "branch";
+
 export interface ModelEdge {
   id: string;
   source: string;
   target: string;
+  /** Free-text display label, historically also abused as the sole way to mark a residual edge (`label === "skip"`). Superseded by `kind` for anything semantic; kept for display purposes only. */
   label?: string;
+  kind?: EdgeKind;
 }
 
 export interface ModelConfig {

@@ -3,8 +3,8 @@ import type { Model, ModelEdge, NodeType } from "@tensorium/model-ir";
 /**
  * Pre-order traversal, children visited left-to-right in the order the
  * adapter's graph.ts actually created them — that order is what
- * layeredLayout uses to position siblings within a rank (see layout.ts), so
- * getting it backwards here doesn't just reorder an internal list, it makes
+ * computeElkLayout (see elkLayout.ts) uses for each node's FIXED_ORDER
+ * ports, so getting it backwards here doesn't just reorder an internal list, it makes
  * unrelated branches land on the wrong side of each other one or more ranks
  * down and cross visibly (confirmed against a real DeepSeek-V2 MLA block:
  * KV Down-projection/Q Projection swapped left-right relative to creation

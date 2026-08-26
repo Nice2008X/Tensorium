@@ -1,4 +1,4 @@
-import type { Model, ModelConfig, ModelMetadata, ModelNode, NodeType, ParameterRef, TensorSlice } from "@tensorium/model-ir";
+import type { EdgeKind, Model, ModelConfig, ModelMetadata, ModelNode, NodeType, ParameterRef, TensorSlice } from "@tensorium/model-ir";
 import { numElements, dtypeSize, modelSourceLabel } from "@tensorium/model-ir";
 
 /**
@@ -183,8 +183,8 @@ export function buildGraph(metadata: ModelMetadata, providerId: string): Model {
     return n;
   }
 
-  function edge(source: string, target: string, label?: string) {
-    edges.push({ id: `${source}->${target}`, source, target, label });
+  function edge(source: string, target: string, label?: string, kind?: EdgeKind) {
+    edges.push({ id: `${source}->${target}`, source, target, label, kind: kind ?? (label === "skip" ? "residual" : "data") });
   }
 
   function normNode(id: string, label: string, parentId: string, weightName: string, dim: number) {
