@@ -23,7 +23,15 @@ export function SettingsButton({ open, onToggle }: { open: boolean; onToggle: ()
   );
 }
 
-export function SettingsPanel({ open, onClose, theme, onThemeChange, allowSyntheticForwardPass, onAllowSyntheticForwardPassChange, forwardPassSettingDisabled = false }: Props) {
+export function SettingsPanel({
+  open,
+  onClose,
+  theme,
+  onThemeChange,
+  allowSyntheticForwardPass,
+  onAllowSyntheticForwardPassChange,
+  forwardPassSettingDisabled = false,
+}: Props) {
   const { t, language, setLanguage } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
 

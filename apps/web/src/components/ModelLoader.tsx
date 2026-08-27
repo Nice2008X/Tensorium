@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LoadProgress } from "@tensorium/model-ir";
 import { PRESET_MODELS } from "../adapters.js";
 import { useTranslation } from "./LanguageContext.js";
@@ -37,6 +37,8 @@ interface Validation {
   check: FileCheck | null;
 }
 const IDLE_VALIDATION: Validation = { checking: false, check: null };
+/** How many presets a preset tab shows per page — configurable in one place. */
+const PRESETS_PER_PAGE = 5;
 
 interface PresetGroupSpec {
   key: string;
@@ -56,7 +58,16 @@ function PresetTabs({ groups, onPick }: { groups: PresetGroupSpec[]; onPick: (re
   const nonEmptyGroups = useMemo(() => groups.filter((g) => g.presets.length > 0), [groups]);
   const [activeKey, setActiveKey] = useState(nonEmptyGroups[0]?.key);
   const active = nonEmptyGroups.find((g) => g.key === activeKey) ?? nonEmptyGroups[0];
+  // Remembered per tab (keyed by group key) rather than one shared number,
+  // so paging into "Real bigger models" doesn't also jump "Models with
+  // MoE" to that same page when you switch back to it.
+  const [pageByGroup, setPageByGroup] = useState<Record<string, number>>({});
   if (!active) return null;
+  const totalPages = Math.max(1, Math.ceil(active.presets.length / PRESETS_PER_PAGE));
+  // Clamped rather than reset via an effect — handles a page that no
+  // longer exists (e.g. the preset list shrank) without an extra render.
+  const page = Math.min(pageByGroup[active.key] ?? 1, totalPages);
+  const pagePresets = active.presets.slice((page - 1) * PRESETS_PER_PAGE, page * PRESETS_PER_PAGE);
   return (
     <div className="model-loader-preset-tabs-wrap">
       <div className="model-loader-source-tabs model-loader-preset-tabs">
@@ -67,13 +78,53 @@ function PresetTabs({ groups, onPick }: { groups: PresetGroupSpec[]; onPick: (re
         ))}
       </div>
       <div className="model-loader-presets">
-        {active.presets.map((p) => (
-          <button key={p.repo} className="preset-chip" onClick={() => onPick(p.repo)}>
-            {p.label}
-          </button>
+        {pagePresets.map((p) => (
+          <PresetChip key={p.repo} label={p.label} onClick={() => onPick(p.repo)} />
         ))}
       </div>
+      {totalPages > 1 && (
+        <div className="model-loader-preset-pagination">
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={"model-loader-preset-page" + (n === page ? " active" : "")}
+              onClick={() => setPageByGroup((prev) => ({ ...prev, [active.key]: n }))}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * A tooltip repeating text that's already fully visible is just noise —
+ * this only sets `title` once the CSS ellipsis (see `.preset-chip` in
+ * styles.css) has actually cut the label off, detected by comparing the
+ * button's scrollWidth (the full untruncated content) against its
+ * clientWidth (what's actually visible) after layout. Re-checked on
+ * window resize since the card's available width can change (the
+ * embedded "load a different model" popover isn't a fixed size the way
+ * the first-load screen's card is).
+ */
+function PresetChip({ label, onClick }: { label: string; onClick: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [truncated, setTruncated] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setTruncated(el.scrollWidth > el.clientWidth);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [label]);
+  return (
+    <button ref={ref} className="preset-chip" onClick={onClick} title={truncated ? label : undefined}>
+      {label}
+    </button>
   );
 }
 

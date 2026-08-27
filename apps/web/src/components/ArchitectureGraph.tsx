@@ -9,6 +9,7 @@ import ReactFlow, {
   Handle,
   MarkerType,
   MiniMap,
+  Panel,
   Position,
   type Edge as RFEdge,
   type EdgeProps,
@@ -268,6 +269,12 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
   // seeing every block individually.
   const [stackRepeats, setStackRepeats] = useLocalStorageState("panel:graph-stack-repeats", true);
   const [exportingImage, setExportingImage] = useState(false);
+  // Starts at 100 (React Flow's own default zoom) rather than reading the
+  // instance up front — it doesn't exist yet on first render — and is kept
+  // in sync via onMove below, which React Flow fires for every pan/zoom
+  // interaction (scroll, pinch, the Controls +/- buttons, and fitView's own
+  // programmatic moves alike).
+  const [zoomPercent, setZoomPercent] = useState(100);
 
   const { nodeIds: rawNodeIds, edgeList: rawEdgeList } = useMemo(() => {
     if (view.kind === "architecture") {
@@ -331,11 +338,23 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
     };
   }, [nodeIds, edgeList]);
 
-  // fitView (the prop below) only runs once, on mount — while this effect
-  // is still resolving, every node sits at (0,0), so the initial fit is
-  // meaningless. Re-fit for real once positions actually land.
+  // The default view is a real 100% zoom, not React Flow's own fit-to-view
+  // scale (which shrinks to whatever fits the whole graph — often well
+  // under 100% for a multi-block architecture) — centered horizontally on
+  // the graph and aligned near its top edge, the natural place to start
+  // reading a top-to-bottom diagram. This only runs once positions are
+  // real (every node sits at (0,0) before that, so there's nothing
+  // meaningful to center on yet); the on-canvas fit-to-screen button and
+  // the "0" shortcut are still there for zooming out to see everything at
+  // once.
   useEffect(() => {
-    if (elkResult) rfInstanceRef.current?.fitView({ padding: 0.2 });
+    const instance = rfInstanceRef.current;
+    const container = containerRef.current;
+    if (!elkResult || !instance || !container) return;
+    const bounds = getNodesBounds(instance.getNodes());
+    const rect = container.getBoundingClientRect();
+    const topMargin = 60;
+    instance.setViewport({ x: rect.width / 2 - (bounds.x + bounds.width / 2), y: topMargin - bounds.y, zoom: 1 });
   }, [elkResult]);
 
   const positions = elkResult?.positions ?? new Map<string, { x: number; y: number; width: number; height: number }>();
@@ -801,15 +820,18 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
           onEdgeMouseLeave={() => setHoveredEdgeId(null)}
           onInit={(instance) => {
             rfInstanceRef.current = instance;
+            setZoomPercent(Math.round(instance.getViewport().zoom * 100));
           }}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
+          onMove={(_, viewport) => setZoomPercent(Math.round(viewport.zoom * 100))}
           proOptions={{ hideAttribution: true }}
           nodesConnectable={false}
           zoomOnDoubleClick={false}
           elementsSelectable
         >
           <Background />
+          <Panel position="top-right" className="graph-zoom-indicator">
+            {zoomPercent}%
+          </Panel>
           <MiniMap pannable zoomable nodeColor={(n) => (n.data as Partial<IRNodeData> | undefined)?.color ?? "#6b7280"} maskColor="rgba(15, 17, 23, 0.6)" />
           <Controls showInteractive={false}>
             <ControlButton onClick={onToggleMaxFrame} title={isMaxFrame ? t("graph.restorePanels") : t("graph.maximizeGraph")}>

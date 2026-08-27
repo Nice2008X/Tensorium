@@ -43,7 +43,7 @@ const en = {
   "app.unknownModelDialogConfirm": "Load anyway",
 
   "loader.title": "Tensorium",
-  "loader.subtitle": "Load a Hugging Face model from a supported architecture — GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi, GLM-4, OLMo, Qwen2-MoE, or Qwen3-MoE — with safetensors weights, and inspect its structure, live.",
+  "loader.subtitle": "Load a Hugging Face model from a supported architecture — GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2 — with safetensors weights, and inspect its structure, live.",
   "loader.limitationNote": "Note: the built-in presets are tiny, randomly-initialized test checkpoints, not real trained models — predictions won't be coherent. This tool is for exploring architecture and mechanics, not model quality.",
   "loader.inputPlaceholder": "org/model-name",
   "loader.presetsWithoutMoe": "Models without MoE",
@@ -144,7 +144,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "仍然加载",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "加载支持的 Hugging Face 模型架构（GPT-2、Llama、Mistral、Gemma、Qwen2、Qwen3、Phi、GLM-4、OLMo、Qwen2-MoE 或 Qwen3-MoE）及其 safetensors 权重，实时查看其结构。",
+    "loader.subtitle": "加载支持的 Hugging Face 模型架构（GPT-2、Llama、Mistral、Gemma、Gemma 4、Qwen2、Qwen3、Qwen3.5、Phi、GLM-4、OLMo、Qwen2-MoE、Qwen3-MoE 或 DeepSeek-V2）及其 safetensors 权重，实时查看其结构。",
     "loader.limitationNote": "注意：内置的预设模型是随机初始化的小型测试权重，并非真实训练模型——预测结果不会连贯有意义。本工具用于探索模型架构与运作机制，而非评估模型质量。",
     "loader.inputPlaceholder": "org/model-name",
     "loader.presetsWithoutMoe": "非 MoE 模型",
@@ -240,7 +240,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Cargar de todos modos",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Carga un modelo de Hugging Face de una arquitectura compatible (GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi, GLM-4, OLMo, Qwen2-MoE o Qwen3-MoE) con pesos safetensors, e inspecciona su estructura en vivo.",
+    "loader.subtitle": "Carga un modelo de Hugging Face de una arquitectura compatible (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE o DeepSeek-V2) con pesos safetensors, e inspecciona su estructura en vivo.",
     "loader.limitationNote": "Nota: los modelos preconfigurados incluidos son checkpoints de prueba diminutos e inicializados aleatoriamente, no modelos realmente entrenados — las predicciones no serán coherentes. Esta herramienta sirve para explorar la arquitectura y el funcionamiento del modelo, no su calidad.",
     "loader.inputPlaceholder": "org/nombre-del-modelo",
     "loader.presetsWithoutMoe": "Modelos sin MoE",
@@ -336,7 +336,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Charger quand même",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Chargez un modèle Hugging Face d'une architecture prise en charge (GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi, GLM-4, OLMo, Qwen2-MoE ou Qwen3-MoE) avec des poids safetensors, et inspectez sa structure en direct.",
+    "loader.subtitle": "Chargez un modèle Hugging Face d'une architecture prise en charge (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE ou DeepSeek-V2) avec des poids safetensors, et inspectez sa structure en direct.",
     "loader.limitationNote": "Remarque : les préréglages fournis sont de minuscules checkpoints de test initialisés aléatoirement, pas de vrais modèles entraînés — les prédictions ne seront pas cohérentes. Cet outil sert à explorer l'architecture et le fonctionnement du modèle, pas sa qualité.",
     "loader.inputPlaceholder": "org/nom-du-modele",
     "loader.presetsWithoutMoe": "Modèles sans MoE",
@@ -432,7 +432,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Trotzdem laden",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Lade ein Hugging-Face-Modell einer unterstützten Architektur (GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi, GLM-4, OLMo, Qwen2-MoE oder Qwen3-MoE) mit Safetensors-Gewichten und untersuche seine Struktur live.",
+    "loader.subtitle": "Lade ein Hugging-Face-Modell einer unterstützten Architektur (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE oder DeepSeek-V2) mit Safetensors-Gewichten und untersuche seine Struktur live.",
     "loader.limitationNote": "Hinweis: Die integrierten Presets sind winzige, zufällig initialisierte Test-Checkpoints, keine echten trainierten Modelle — Vorhersagen sind nicht kohärent. Dieses Tool dient der Erkundung von Architektur und Funktionsweise, nicht der Modellqualität.",
     "loader.inputPlaceholder": "org/modell-name",
     "loader.presetsWithoutMoe": "Modelle ohne MoE",
@@ -528,7 +528,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "それでも読み込む",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "対応アーキテクチャ（GPT-2、Llama、Mistral、Gemma、Qwen2、Qwen3、Phi、GLM-4、OLMo、Qwen2-MoE、Qwen3-MoE のいずれか）の Hugging Face モデルを safetensors 形式の重みとともに読み込み、その構造をライブで確認できます。",
+    "loader.subtitle": "対応アーキテクチャ（GPT-2、Llama、Mistral、Gemma、Gemma 4、Qwen2、Qwen3、Qwen3.5、Phi、GLM-4、OLMo、Qwen2-MoE、Qwen3-MoE、DeepSeek-V2 のいずれか）の Hugging Face モデルを safetensors 形式の重みとともに読み込み、その構造をライブで確認できます。",
     "loader.limitationNote": "注記: 内蔵のプリセットはランダム初期化された小さなテスト用チェックポイントであり、実際に学習済みのモデルではありません。予測結果に一貫性はありません。このツールはモデルの品質ではなく、アーキテクチャと仕組みを探索するためのものです。",
     "loader.inputPlaceholder": "org/モデル名",
     "loader.presetsWithoutMoe": "MoE を使用しないモデル",
@@ -624,7 +624,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "그래도 로드",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "지원되는 아키텍처(GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE 중 하나)의 Hugging Face 모델을 safetensors 가중치와 함께 불러와 구조를 실시간으로 살펴보세요.",
+    "loader.subtitle": "지원되는 아키텍처(GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE, DeepSeek-V2 중 하나)의 Hugging Face 모델을 safetensors 가중치와 함께 불러와 구조를 실시간으로 살펴보세요.",
     "loader.limitationNote": "참고: 기본 제공되는 프리셋은 무작위로 초기화된 작은 테스트용 체크포인트이며 실제 학습된 모델이 아닙니다. 예측 결과는 일관성이 없습니다. 이 도구는 모델 품질이 아니라 아키텍처와 동작 방식을 탐색하기 위한 것입니다.",
     "loader.inputPlaceholder": "org/모델-이름",
     "loader.presetsWithoutMoe": "MoE를 사용하지 않는 모델",
@@ -720,7 +720,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Carregar mesmo assim",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Carregue um modelo do Hugging Face de uma arquitetura compatível (GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi, GLM-4, OLMo, Qwen2-MoE ou Qwen3-MoE) com pesos safetensors e inspecione sua estrutura ao vivo.",
+    "loader.subtitle": "Carregue um modelo do Hugging Face de uma arquitetura compatível (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE ou DeepSeek-V2) com pesos safetensors e inspecione sua estrutura ao vivo.",
     "loader.limitationNote": "Nota: os modelos predefinidos incluídos são checkpoints de teste minúsculos e inicializados aleatoriamente, não modelos realmente treinados — as previsões não serão coerentes. Esta ferramenta serve para explorar a arquitetura e o funcionamento do modelo, não sua qualidade.",
     "loader.inputPlaceholder": "org/nome-do-modelo",
     "loader.presetsWithoutMoe": "Modelos sem MoE",
@@ -816,7 +816,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Всё равно загрузить",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Загрузите модель Hugging Face одной из поддерживаемых архитектур (GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi, GLM-4, OLMo, Qwen2-MoE или Qwen3-MoE) с весами safetensors и изучите её структуру в реальном времени.",
+    "loader.subtitle": "Загрузите модель Hugging Face одной из поддерживаемых архитектур (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE или DeepSeek-V2) с весами safetensors и изучите её структуру в реальном времени.",
     "loader.limitationNote": "Примечание: встроенные пресеты — это крошечные тестовые чекпойнты со случайной инициализацией, а не реально обученные модели — предсказания не будут связными. Этот инструмент предназначен для изучения архитектуры и механики модели, а не её качества.",
     "loader.inputPlaceholder": "org/название-модели",
     "loader.presetsWithoutMoe": "Модели без MoE",
