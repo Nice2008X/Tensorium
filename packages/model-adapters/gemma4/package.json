@@ -1,0 +1,13 @@
+{
+  "name": "@tensorium/adapter-gemma4",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@tensorium/model-ir": "*",
+    "@tensorium/tensor-core": "*",
+    "@tensorium/hf-client": "*",
+    "@tensorium/nn-ops": "*"
+  }
+}

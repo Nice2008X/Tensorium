@@ -10,6 +10,8 @@ interface Props {
   onThemeChange: (t: Theme) => void;
   allowSyntheticForwardPass: boolean;
   onAllowSyntheticForwardPassChange: (v: boolean) => void;
+  /** True when the currently loaded model's real weight bytes exceed the hard 20GB ceiling — the checkbox is disabled outright, since enabling it couldn't do anything for this model (forwardPassBlocked stays true regardless). Defaults to false — no model, or a model under the ceiling, never disables this. */
+  forwardPassSettingDisabled?: boolean;
 }
 
 export function SettingsButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -21,7 +23,15 @@ export function SettingsButton({ open, onToggle }: { open: boolean; onToggle: ()
   );
 }
 
-export function SettingsPanel({ open, onClose, theme, onThemeChange, allowSyntheticForwardPass, onAllowSyntheticForwardPassChange }: Props) {
+export function SettingsPanel({
+  open,
+  onClose,
+  theme,
+  onThemeChange,
+  allowSyntheticForwardPass,
+  onAllowSyntheticForwardPassChange,
+  forwardPassSettingDisabled = false,
+}: Props) {
   const { t, language, setLanguage } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -66,15 +76,16 @@ export function SettingsPanel({ open, onClose, theme, onThemeChange, allowSynthe
         </select>
       </div>
       <div className="settings-section">
-        <label className="settings-checkbox-row">
+        <label className={"settings-checkbox-row" + (forwardPassSettingDisabled ? " disabled" : "")}>
           <input
             type="checkbox"
             checked={allowSyntheticForwardPass}
+            disabled={forwardPassSettingDisabled}
             onChange={(e) => onAllowSyntheticForwardPassChange(e.target.checked)}
           />
           {t("settings.structureOnlyForwardPass")}
         </label>
-        <div className="settings-section-desc">{t("settings.structureOnlyForwardPassDesc")}</div>
+        <div className="settings-section-desc">{t(forwardPassSettingDisabled ? "settings.structureOnlyForwardPassDisabledDesc" : "settings.structureOnlyForwardPassDesc")}</div>
       </div>
     </div>
   );

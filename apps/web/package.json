@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check-graph": "npx tsx scripts/check-graph-layout.ts"
   },
   "dependencies": {
     "@tensorium/adapter-deepseek-v2": "*",
     "@tensorium/adapter-gemma": "*",
+    "@tensorium/adapter-gemma4": "*",
+    "@tensorium/adapter-generic": "*",
     "@tensorium/adapter-glm4": "*",
     "@tensorium/adapter-gpt2": "*",
     "@tensorium/adapter-llama": "*",
@@ -20,12 +23,14 @@
     "@tensorium/adapter-qwen": "*",
     "@tensorium/adapter-qwen-moe": "*",
     "@tensorium/adapter-qwen3": "*",
+    "@tensorium/adapter-qwen3-5": "*",
     "@tensorium/adapter-qwen3-moe": "*",
     "@tensorium/hf-client": "*",
     "@tensorium/interpretability": "*",
     "@tensorium/model-ir": "*",
     "@tensorium/tensor-core": "*",
     "@tensorium/tokenizer": "*",
+    "elkjs": "^0.12.0",
     "html-to-image": "^1.11.13",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

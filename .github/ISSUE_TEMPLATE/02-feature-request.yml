@@ -1,0 +1,55 @@
+name: ✨ Feature Request
+description: Suggest an idea, a new architecture to support, or an improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest an improvement! If this is a
+        request to support a new model architecture, the "Related model" field
+        below helps a lot — a link to the real config.json/modeling code is
+        the fastest way to scope the work.
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of what the problem is, if any. E.g. "I'm always frustrated when..."
+    validations:
+      required: false
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the solution you'd like
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: input
+    id: related-model
+    attributes:
+      label: Related model or Hugging Face repo (if applicable)
+      description: For a new-architecture request, a link to the model's real config.json or modeling source on Hugging Face/GitHub.
+      placeholder: e.g. https://huggingface.co/mistralai/Mixtral-8x7B-v0.1
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative solutions or features you've considered.
+    validations:
+      required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else that would help — screenshots, mockups, links to related discussions.
+    validations:
+      required: false

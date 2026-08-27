@@ -11,6 +11,7 @@ import { ModelLoader } from "./components/ModelLoader.js";
 import { LoadProgressBar } from "./components/LoadProgressBar.js";
 import { LoadModelPanel } from "./components/LoadModelPanel.js";
 import { SaveModelDialog, type SaveModelFile } from "./components/SaveModelDialog.js";
+import { UnknownModelDialog } from "./components/UnknownModelDialog.js";
 import { ModelInfoBar } from "./components/ModelInfoBar.js";
 import { ModelTree } from "./components/ModelTree.js";
 import { ArchitectureGraph, type GraphView } from "./components/ArchitectureGraph.js";
@@ -28,6 +29,9 @@ const BOTTOM_PANEL_DEFAULT_HEIGHT = 360;
 const BOTTOM_PANEL_MIN_HEIGHT = 160;
 /** Leaves at least this much vertical space for the tree/graph/inspector row above, however tall the window is. */
 const BOTTOM_PANEL_TOP_RESERVE = 240;
+
+/** Real (on-disk) weight-byte ceiling past which a structure-only model's synthetic forward pass is refused outright, not just opt-in-gated — see `oversizedForForwardPass` below. */
+const MAX_FORWARD_PASS_WEIGHT_BYTES = 20 * 1024 ** 3;
 
 function computeActivationMagnitude(t: Tensor): number {
   let sum = 0;
@@ -56,7 +60,7 @@ function containingBlockId(model: Model, nodeId: string): string | null {
 }
 
 export function App() {
-  const { state, load, loadLocalFiles, reset, restoring, progress } = useModel();
+  const { state, load, loadLocalFiles, reset, restoring, progress, confirmUnknownModel } = useModel();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -157,7 +161,14 @@ export function App() {
       <div className="app-loader-screen">
         <div className="top-right-controls">
           <SettingsButton open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
-          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} allowSyntheticForwardPass={allowSyntheticForwardPass} onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal} />
+          <SettingsPanel
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            theme={theme}
+            onThemeChange={setTheme}
+            allowSyntheticForwardPass={allowSyntheticForwardPass}
+            onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal}
+          />
         </div>
         {showRestoring ? (
           <div className="app-restoring">
@@ -166,15 +177,34 @@ export function App() {
             {progress && <LoadProgressBar progress={progress} />}
           </div>
         ) : (
-          <ModelLoader status={state.status} error={state.error} progress={progress} onLoad={load} onLoadLocal={loadLocalFiles} />
+          <ModelLoader
+            status={state.status === "confirm-unknown" ? "loading" : state.status}
+            error={state.error}
+            progress={progress}
+            onLoad={load}
+            onLoadLocal={loadLocalFiles}
+          />
         )}
+        <UnknownModelDialog
+          open={state.status === "confirm-unknown"}
+          modelType={state.pendingPreview?.model_type}
+          architectures={state.pendingPreview?.architectures}
+          onCancel={() => confirmUnknownModel(false)}
+          onConfirm={() => confirmUnknownModel(true)}
+        />
       </div>
     );
   }
 
   const model = state.model;
   const structureOnly = state.metadata?.structureOnly === true;
-  const forwardPassBlocked = structureOnly && !allowSyntheticForwardPass;
+  // Beyond this many real (on-disk) weight bytes, a synthetic forward pass
+  // isn't just gated behind opt-in, it's refused outright: at 4x that in
+  // materialized Float64Array weights (see estimatedForwardPassBytes below),
+  // the tab is essentially guaranteed to freeze or crash, so there's no
+  // responsible "enable anyway" for a checkpoint this large.
+  const oversizedForForwardPass = structureOnly && totalParameterBytes(model) > MAX_FORWARD_PASS_WEIGHT_BYTES;
+  const forwardPassBlocked = structureOnly && (oversizedForForwardPass || !allowSyntheticForwardPass);
   // Rough floor, not a precise prediction: every tensor this app touches is
   // materialized as a Float64Array (8 bytes/element) regardless of its
   // on-disk dtype (BF16/F16 = 2 bytes/element on every structure-only preset
@@ -295,7 +325,7 @@ export function App() {
 
   return (
     <div className={"app" + (analysisBusy ? " app-busy" : "") + (resizingBottom ? " app-resizing-panel" : "")}>
-      <ModelInfoBar model={model} structureOnly={structureOnly} />
+      <ModelInfoBar model={model} structureOnly={structureOnly} bestEffort={state.adapter?.id === "generic"} />
       <div className="top-right-controls">
         <div className="control-group">
           <button className="close-model" onClick={reset} title={t("app.closeModel")}>
@@ -320,7 +350,15 @@ export function App() {
         </div>
         <div className="control-group">
           <SettingsButton open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
-          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} allowSyntheticForwardPass={allowSyntheticForwardPass} onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal} />
+          <SettingsPanel
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            theme={theme}
+            onThemeChange={setTheme}
+            allowSyntheticForwardPass={allowSyntheticForwardPass}
+            onAllowSyntheticForwardPassChange={setAllowSyntheticForwardPassAndReveal}
+            forwardPassSettingDisabled={oversizedForForwardPass}
+          />
         </div>
       </div>
       <InferencePanel
@@ -335,6 +373,7 @@ export function App() {
         onRunB={promptB.run}
         structureOnly={structureOnly}
         forwardPassBlocked={forwardPassBlocked}
+        oversizedForForwardPass={oversizedForForwardPass}
         onEnableForwardPass={() => setAllowSyntheticForwardPassAndReveal(true)}
         onDisableForwardPass={() => setAllowSyntheticForwardPass(false)}
         estimatedForwardPassBytes={estimatedForwardPassBytes}

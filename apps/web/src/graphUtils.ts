@@ -1,12 +1,25 @@
 import type { Model, ModelEdge, NodeType } from "@tensorium/model-ir";
 
+/**
+ * Pre-order traversal, children visited left-to-right in the order the
+ * adapter's graph.ts actually created them — that order is what
+ * computeElkLayout (see elkLayout.ts) uses for each node's FIXED_ORDER
+ * ports, so getting it backwards here doesn't just reorder an internal list, it makes
+ * unrelated branches land on the wrong side of each other one or more ranks
+ * down and cross visibly (confirmed against a real DeepSeek-V2 MLA block:
+ * KV Down-projection/Q Projection swapped left-right relative to creation
+ * order, crossing the very next rank's RoPE/RMSNorm edges). A stack-based
+ * DFS visits children in *reverse* push order unless each node's children
+ * are reversed before pushing — that's what the extra `.reverse()` calls
+ * below correct for; dropping either one silently reintroduces the bug.
+ */
 export function getDescendants(model: Model, id: string): string[] {
   const out: string[] = [];
-  const stack = [...model.nodes[id].children];
+  const stack = [...model.nodes[id].children].reverse();
   while (stack.length) {
     const cur = stack.pop()!;
     out.push(cur);
-    stack.push(...model.nodes[cur].children);
+    stack.push(...[...model.nodes[cur].children].reverse());
   }
   return out;
 }

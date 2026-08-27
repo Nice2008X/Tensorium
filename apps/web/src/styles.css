@@ -269,8 +269,30 @@ input, select { font-family: inherit; }
   color: var(--accent-text);
   font-size: 12px;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  /* A long label (architecture details in parens can run long — e.g.
+     OLMo's) wraps to a second line by default, making some chips twice
+     the height of their neighbors. Truncating to one line with an
+     ellipsis keeps every chip in a tab the same height; the full text is
+     still available via the `title` attribute's native tooltip. */
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .preset-chip:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.model-loader-preset-pagination { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.model-loader-preset-page {
+  min-width: 26px;
+  padding: 4px 8px;
+  background: var(--bg-chip);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.model-loader-preset-page:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.model-loader-preset-page.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .model-loader-error {
   margin-top: 16px;
   padding: 10px 12px;
@@ -527,6 +549,34 @@ input, select { font-family: inherit; }
   color: white;
 }
 .save-model-dialog-confirm:hover { background: var(--accent-hover); }
+.unknown-model-dialog-detected {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  background: var(--bg-chip);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+.unknown-model-dialog-detected-label { color: var(--text-tertiary); flex-shrink: 0; }
+.unknown-model-dialog-detected-value { font-family: ui-monospace, monospace; color: var(--text-primary); overflow-wrap: anywhere; }
+/* Styled like the "Enable anyway" action in the structure-only forward-pass
+   note (same warning color) rather than the accent color Save Model's
+   confirm button uses — this is the riskier, non-default choice, and
+   should read that way, not as the dialog's primary action. */
+.unknown-model-dialog-confirm {
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  transition: background-color var(--transition-fast);
+}
+.unknown-model-dialog-confirm:hover { background: var(--warning); color: var(--bg-base); }
 
 /* --- Settings button + panel --- */
 .settings-toggle-btn {
@@ -599,6 +649,7 @@ input, select { font-family: inherit; }
 }
 .settings-language-select:focus-visible { border-color: var(--accent); }
 .settings-checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-primary); cursor: pointer; }
+.settings-checkbox-row.disabled { cursor: default; opacity: 0.6; }
 .settings-section-desc { margin-top: 4px; font-size: 11px; color: var(--text-tertiary); line-height: 1.5; }
 
 /* --- Theme switcher --- */
@@ -1027,6 +1078,18 @@ input, select { font-family: inherit; }
   padding: 0;
 }
 .graph-breadcrumb button:hover { color: var(--accent-hover); }
+.graph-zoom-indicator {
+  background: rgba(22, 25, 35, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--border-default);
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-panel);
+  pointer-events: none;
+}
 .control-icon { display: inline-flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1; color: #333; font-family: ui-monospace, monospace; }
 .control-icon.active { color: #2563eb; font-weight: 700; }
 /* Our custom toggle buttons default to sitting flush against each other

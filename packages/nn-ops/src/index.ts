@@ -151,6 +151,11 @@ export function relu(x: number): number {
   return Math.max(0, x);
 }
 
+/** Numerically stable softplus: log(1+e^x), computed directly from x for large x to avoid overflowing e^x first. Used by Gated DeltaNet-style decay gates (Qwen3-Next/Qwen3.5). */
+export function softplus(x: number): number {
+  return x > 20 ? x : Math.log1p(Math.exp(x));
+}
+
 export function applyActivation(x: Matrix, kind: string): Matrix {
   const fn = kind.includes("new") || kind === "gelu_pytorch_tanh" ? geluNew : kind === "silu" || kind === "swish" ? silu : kind === "relu" ? relu : gelu;
   return x.map((row) => row.map(fn));
@@ -243,11 +248,27 @@ export interface AttentionResult {
  * Scaled dot-product self-attention with a causal mask, GQA-aware (K/V
  * heads are repeated to match the number of query heads when
  * numKeyValueHeads < numHeads).
+ *
+ * `scale` defaults to the usual `1/sqrt(headDim)` — pass an explicit value
+ * for a model that deliberately departs from it (Gemma-4's text decoder
+ * fixes it at 1.0, relying on its Q/K RMSNorm instead). `slidingWindow`,
+ * when given, additionally masks out any key more than that many positions
+ * behind the query — on top of, not instead of, the causal mask — for a
+ * local/global hybrid attention pattern (also Gemma-4).
  */
-export function causalSelfAttention(q: Matrix, k: Matrix, v: Matrix, numHeads: number, numKeyValueHeads: number, headDim: number): AttentionResult {
+export function causalSelfAttention(
+  q: Matrix,
+  k: Matrix,
+  v: Matrix,
+  numHeads: number,
+  numKeyValueHeads: number,
+  headDim: number,
+  options?: { scale?: number; slidingWindow?: number }
+): AttentionResult {
   const S = q.length;
   const groupSize = numHeads / numKeyValueHeads;
-  const scale = 1 / Math.sqrt(headDim);
+  const scale = options?.scale ?? 1 / Math.sqrt(headDim);
+  const slidingWindow = options?.slidingWindow;
   const perHeadOutputs: Matrix[] = [];
   const attentionWeights: number[][][] = [];
 
@@ -259,7 +280,10 @@ export function causalSelfAttention(q: Matrix, k: Matrix, v: Matrix, numHeads: n
 
     const scores = matmul(qh, kh).map((row) => row.map((v2) => v2 * scale));
     for (let i = 0; i < S; i++) {
-      for (let j = i + 1; j < S; j++) scores[i][j] = -Infinity; // causal mask
+      for (let j = 0; j < S; j++) {
+        const outOfWindow = slidingWindow != null && i - j >= slidingWindow;
+        if (j > i || outOfWindow) scores[i][j] = -Infinity; // causal mask, plus the sliding window's lower bound when set
+      }
     }
     const weights = scores.map(softmaxRow);
     attentionWeights.push(weights);
@@ -282,6 +306,133 @@ export function causalSelfAttention(q: Matrix, k: Matrix, v: Matrix, numHeads: n
   }
 
   return { output, attentionWeights };
+}
+
+/**
+ * Causal depthwise 1D convolution over the sequence dimension, each
+ * channel convolved independently against its own kernel, then SiLU —
+ * the short-conv preprocessing a Gated DeltaNet layer (Qwen3-Next /
+ * Qwen3.5-style hybrid attention) applies to its fused Q/K/V projection
+ * before the recurrence. Matches `causal_conv1d_fn(..., activation="silu")`
+ * in the real `transformers` implementation: left-padded with zeros (so
+ * output[t] only ever depends on input[t-kernelWidth+1 .. t]), and
+ * `kernel[c]` holds channel c's own taps in PyTorch conv1d's
+ * cross-correlation order (`kernel[c][0]` weights the earliest input in
+ * the window, `kernel[c][kernelWidth-1]` weights input[t] itself).
+ */
+export function causalConv1dSilu(x: Matrix, kernel: Matrix, bias: number[] | null): Matrix {
+  const S = x.length;
+  const C = x[0]?.length ?? 0;
+  const width = kernel[0]?.length ?? 0;
+  const out = zeros(S, C);
+  for (let t = 0; t < S; t++) {
+    for (let c = 0; c < C; c++) {
+      let acc = bias ? bias[c] : 0;
+      for (let w = 0; w < width; w++) {
+        const srcT = t - (width - 1) + w;
+        if (srcT >= 0) acc += x[srcT][c] * kernel[c][w];
+      }
+      out[t][c] = silu(acc);
+    }
+  }
+  return out;
+}
+
+export interface GatedDeltaRuleResult {
+  output: Matrix; // [S, numValueHeads * valueHeadDim]
+}
+
+/**
+ * The sequential (non-chunked) form of the gated delta rule, ported
+ * directly from `torch_recurrent_gated_delta_rule` in the real
+ * `transformers` Qwen3-Next implementation (not derived independently —
+ * confirmed against the actual source, statement order included). For
+ * each head, maintains a `[keyHeadDim, valueHeadDim]` recurrent state
+ * matrix and, at every timestep: decays the state by that step's `decay`
+ * factor, computes `kv_mem = stateᵀk_t` (what the decayed state already
+ * predicts for this key), corrects the state by the outer product of
+ * `k_t` and `beta_t * (v_t - kv_mem)`, then reads the output out as
+ * `stateᵀq_t`.
+ *
+ * `numKeyHeads` divides `numValueHeads`: each key/query/decay/beta head is
+ * shared, GQA-style, across `numValueHeads / numKeyHeads` value heads —
+ * matches Qwen3-Next/Qwen3.5's real head-count asymmetry (e.g. 16 key
+ * heads, 48 value heads). `q`/`k` are laid out with `numKeyHeads` heads of
+ * `keyHeadDim` each (query shares key's head layout in this architecture,
+ * there's no separate query head_dim); `v`/`decay`/`beta` are laid out
+ * with `numValueHeads` heads.
+ *
+ * `decay` must already be the per-step multiplicative factor (i.e.
+ * `exp(g_t)` in the real source, where `g_t = -exp(A_log) *
+ * softplus(a_t + dt_bias)`) — computing that from the model's own
+ * `A_log`/`dt_bias` parameters is left to the caller, since those are
+ * architecture-specific learned parameters, not something this generic
+ * primitive should know the name of.
+ *
+ * `q`/`k` are L2-normalized per head (over `keyHeadDim`) before use —
+ * the real source always passes `use_qk_l2norm_in_kernel=True`, it's not
+ * behind a config flag, so this primitive always does it too rather than
+ * exposing a toggle nothing in this codebase would ever set to false.
+ */
+export function gatedDeltaRule(
+  q: Matrix,
+  k: Matrix,
+  v: Matrix,
+  decay: Matrix, // [S, numValueHeads], already exp(g_t)
+  beta: Matrix, // [S, numValueHeads], already sigmoid(b_t)
+  numKeyHeads: number,
+  numValueHeads: number,
+  keyHeadDim: number,
+  valueHeadDim: number
+): GatedDeltaRuleResult {
+  const S = q.length;
+  const groupSize = numValueHeads / numKeyHeads;
+  const output = zeros(S, numValueHeads * valueHeadDim);
+  const l2norm = (row: number[], off: number, len: number): number[] => {
+    let sumSq = 0;
+    for (let i = 0; i < len; i++) sumSq += row[off + i] * row[off + i];
+    const denom = Math.sqrt(sumSq) + 1e-6;
+    return Array.from({ length: len }, (_, i) => row[off + i] / denom);
+  };
+
+  for (let h = 0; h < numValueHeads; h++) {
+    const kh = Math.floor(h / groupSize);
+    const qOff = kh * keyHeadDim;
+    const kOff = kh * keyHeadDim;
+    const vOff = h * valueHeadDim;
+    const state = zeros(keyHeadDim, valueHeadDim);
+
+    for (let t = 0; t < S; t++) {
+      const gt = decay[t][h];
+      const betaT = beta[t][h];
+      const qt = l2norm(q[t], qOff, keyHeadDim);
+      const kt = l2norm(k[t], kOff, keyHeadDim);
+
+      for (let i = 0; i < keyHeadDim; i++) for (let j = 0; j < valueHeadDim; j++) state[i][j] *= gt;
+
+      const kvMem = new Array(valueHeadDim).fill(0);
+      for (let i = 0; i < keyHeadDim; i++) {
+        const ki = kt[i];
+        for (let j = 0; j < valueHeadDim; j++) kvMem[j] += state[i][j] * ki;
+      }
+
+      const delta = new Array(valueHeadDim);
+      for (let j = 0; j < valueHeadDim; j++) delta[j] = (v[t][vOff + j] - kvMem[j]) * betaT;
+
+      for (let i = 0; i < keyHeadDim; i++) {
+        const ki = kt[i];
+        for (let j = 0; j < valueHeadDim; j++) state[i][j] += ki * delta[j];
+      }
+
+      for (let j = 0; j < valueHeadDim; j++) {
+        let acc = 0;
+        for (let i = 0; i < keyHeadDim; i++) acc += state[i][j] * qt[i];
+        output[t][vOff + j] = acc;
+      }
+    }
+  }
+
+  return { output };
 }
 
 export * from "./intervene.js";

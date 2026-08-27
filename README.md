@@ -5,12 +5,16 @@
 An interactive, in-browser explorer and debugger for large language model
 internals. Point it at a Hugging Face repo that ships `safetensors`
 weights for one of the [supported architectures](#supported-architectures)
-(GPT-2, Llama, Mistral, Gemma, Qwen2, Qwen3, Phi-3/4, GLM-4, OLMo, Qwen2-MoE, or Qwen3-MoE) and it parses the
-model's real config and weights, renders its architecture as a navigable
-graph, runs an actual forward pass in the browser (no backend, no GPU),
-and lets you inspect every tensor, watch predictions form layer by layer,
-and run causal interventions (ablate a head, patch in an activation from
-another prompt) to see what actually drives the model's output.
+(GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5/Qwen3.8,
+Phi-3/4, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2) and it parses
+the model's real config and weights, renders its architecture as a
+navigable graph — laid out by [ELK](https://eclipse.dev/elk/), the same
+layered-graph engine used by professional diagramming tools, not an ad
+hoc heuristic — runs an actual forward pass in the browser (no backend,
+no GPU), and lets you inspect every tensor, watch predictions form layer
+by layer, and run causal interventions (ablate a head, patch in an
+activation from another prompt) to see what actually drives the model's
+output.
 
 Everything runs client-side. Weights are fetched directly from the
 Hugging Face CDN and executed with a small dependency-free numeric engine
@@ -19,7 +23,7 @@ written in TypeScript. Fetched files are cached in the browser's IndexedDB
 network round trip at all — files over 50 MB are never written to that
 cache and always come straight from Hugging Face instead.
 
-![Screenshot of Tensorium: a Qwen3-MoE transformer block's Attention internals with a scope box grouping its Q/K/V/Output projections, the model tree showing its Mixture-of-Experts feed-forward layer, the Inspector panel with the attention formula and GQA metadata, and the Tensor Explorer's activation heatmap](docs/screenshot.png)
+![Screenshot of Tensorium: DeepSeek-V2's Multi-head Latent Attention internals, ELK-routed, with a scope box grouping the Q/KV down/up-projections and decoupled RoPE, the model tree, the Inspector panel with the attention formula, and the Tensor Explorer's activation heatmap](docs/screenshot.png)
 
 Note: the built-in presets are tiny, randomly-initialized test checkpoints,
 not real trained models — predictions won't be coherent. This tool is for
@@ -28,25 +32,39 @@ exploring architecture and mechanics, not model quality.
 ## Features
 
 - **Load any compatible Hugging Face model** by repo id — no upload, no
-  server-side processing. Eight architecture families are supported out
-  of the box (see [Supported architectures](#supported-architectures)).
-  Alternatively, pick a local `config.json` + `.safetensors` (+ optional
-  `tokenizer.json`) straight off disk — each file is content-sniffed
-  before loading (not just trusted by extension) to catch a mislabeled or
-  corrupt file immediately, with a size warning for very large weight
-  files. A **Save model** button downloads the loaded model's exact
-  original bytes back out, behind a confirmation dialog that names every
-  file and its size before anything downloads.
-- **Architecture graph** — the model rendered as a node graph (via React
-  Flow) at two levels of detail: the full architecture, and a
-  double-click-to-expand view of a single transformer block's internal
-  wiring (attention projections, norms, MLP, residual adds). Selecting a
-  container node (e.g. Attention) draws a scope box around its leaf
-  components; a graph control can collapse repeated same-type chains
-  (e.g. 5 transformer blocks) into a single stacked node for a more
-  condensed view, and toggle back to the expanded chain on demand. A
-  built-in export button renders the full graph (not just the visible
-  viewport) to a PNG.
+  server-side processing. A dozen-plus architecture families are
+  supported out of the box (see [Supported
+  architectures](#supported-architectures)), including a few that need
+  real Model IR extensions beyond a Llama-shaped GQA + gated-MLP
+  block — Multi-head Latent Attention, a hybrid linear/recurrent
+  attention decoder, a per-layer-input-projection design — not just
+  another config flag. Alternatively, pick a local `config.json` +
+  `.safetensors` (+ optional `tokenizer.json`) straight off disk — each
+  file is content-sniffed before loading (not just trusted by extension)
+  to catch a mislabeled or corrupt file immediately, with a size warning
+  for very large weight files; any structure-only model over 20 GB has
+  its synthetic forward pass disabled outright (the option to allow one
+  is disabled too), since a forward pass through fabricated random
+  weights that size isn't worth the browser memory it costs. A **Save
+  model** button downloads the loaded model's exact original bytes back
+  out, behind a confirmation dialog that names every file and its size
+  before anything downloads.
+- **Architecture graph** — the model rendered as a node graph (via [React
+  Flow](https://reactflow.dev/) for rendering, [ELK](https://eclipse.dev/elk/)
+  for layout — a real layered-graph engine with explicit per-node port
+  ordering and real edge routing, not a hand-rolled approximation) at two
+  levels of detail: the full architecture, and a double-click-to-expand
+  view of a single transformer block's internal wiring (attention
+  projections, norms, MLP, residual adds, gates). Opens at a true 100%
+  zoom by default (with a live zoom-percentage readout), centered near
+  the top of the graph — the on-canvas fit-to-screen button and the `0`
+  shortcut zoom out to see the whole thing at once. Selecting a container
+  node (e.g. Attention) draws a scope box around its leaf components; a
+  graph control can collapse repeated same-type chains (e.g. 5
+  transformer blocks) into a single stacked node for a more condensed
+  view, and toggle back to the expanded chain on demand. A built-in
+  export button renders the full graph (not just the visible viewport)
+  to a PNG.
 - **Model tree** — a classic collapsible tree view of every module and
   parameter, alongside the graph.
 - **Inspector** — click any component for a plain-language explanation of
@@ -75,6 +93,45 @@ exploring architecture and mechanics, not model quality.
   resize it (within sane min/max bounds); it and the tree/inspector/
   prediction panels each collapse independently, and every size/collapse
   preference persists across reloads.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%">
+
+**Loading a model**
+![The loader screen, offering GPT-2/Llama/Mistral/Gemma/Qwen/GLM-4/OLMo presets grouped into dense, MoE, and real-bigger-model tabs](docs/screenshot-loader.png)
+
+</td>
+<td width="50%">
+
+**A hybrid linear/recurrent decoder**
+Qwen3.5's Gated DeltaNet block — a short causal convolution feeding a per-token recurrent state update, nothing like softmax attention — laid out by ELK alongside the ordinary residual/FFN path.
+![Qwen3.5's Gated DeltaNet block: QKV Projection fanning out to a causal convolution and the β/decay gate projections](docs/screenshot-gated-deltanet.png)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**The full architecture, at a glance**
+The top-level graph — real 100% zoom by default, with a live zoom-percentage readout — before diving into any one block's internals.
+![Qwen3-MoE's top-level architecture graph: token embedding into two transformer blocks into the LM head](docs/screenshot-architecture-overview.png)
+
+</td>
+<td width="50%">
+
+**Logit Lens**
+Every layer's hidden state projected through the final norm and LM head, watching the next-token prediction sharpen (or change its mind) layer by layer.
+![The Logit Lens panel showing the evolving next-token prediction across the embedding, each transformer block, and the final layer](docs/screenshot-logit-lens.png)
+
+</td>
+</tr>
+</table>
+
+**Causal interventions** — zero out a component or patch in an activation from a second prompt, and see the effect on the output distribution.
+![The Experiment panel with RMSNorm (pre-attention) selected, offering a Zero out (ablate) / Patch-in operation and a token-position scope](docs/screenshot-experiment.png)
 
 ## How it works
 
@@ -123,6 +180,20 @@ they're all thin wrappers around one shared, option-parameterized engine
 (`adapter-llama-family`) — see [Adding a new
 architecture](#adding-a-new-architecture).
 
+Three architectures are structurally different enough that they get their
+own adapter package instead of another `adapter-llama-family` option:
+**DeepSeek-V2**'s Multi-head Latent Attention (K/V reconstructed from one
+shared low-rank latent, with only part of each head rotated) and
+DeepSeekMoE; **Gemma 4**'s alternating sliding/global attention with two
+different head_dim/RoPE configurations, per-layer frozen K/V reuse on
+some layers, and a per-layer embedding table (text decoder only — its
+vision/audio towers aren't loaded); and **Qwen3.5/Qwen3.8**'s hybrid
+decoder, where most layers run a linear/recurrent Gated DeltaNet
+mechanism (a short causal convolution feeding a per-token recurrent
+state update — nothing like softmax attention) interleaved with periodic
+ordinary GQA layers (text decoder only here too — its vision tower isn't
+loaded).
+
 ## Project layout
 
 ```
@@ -161,11 +232,24 @@ packages/
                           each sub-layer's output, before the residual add)
                           and partial rotary (RoPE applied to only a leading
                           slice of each head).
+    deepseek-v2/            Own adapter: Multi-head Latent Attention (shared
+                          low-rank K/V latent, partial RoPE) and DeepSeekMoE
+                          (fine-grained experts, always-on shared experts,
+                          optional group-limited routing).
+    gemma4/                 Own adapter: alternating sliding/global attention,
+                          two head_dim/RoPE configurations, per-layer frozen
+                          K/V reuse, a per-layer embedding table. Text decoder
+                          only — vision/audio towers aren't loaded.
+    qwen3-5/                Own adapter: hybrid decoder interleaving a
+                          linear/recurrent Gated DeltaNet mechanism with
+                          periodic ordinary GQA layers. Text decoder only —
+                          the vision tower isn't loaded.
 apps/
-  web/                    React + React Flow UI: tree / architecture graph /
-                          inspector / tensor explorer / inference panel / logit
-                          lens / token attribution / experiment panel / settings
-                          (themes + language).
+  web/                    React UI: tree / architecture graph (React Flow for
+                          rendering, ELK for layout) / inspector / tensor
+                          explorer / inference panel / logit lens / token
+                          attribution / experiment panel / settings (themes +
+                          language).
 ```
 
 ## Supported architectures
@@ -183,6 +267,9 @@ apps/
 | OLMo | `adapter-olmo` | [`katuni4ka/tiny-random-olmo-hf`](https://huggingface.co/katuni4ka/tiny-random-olmo-hf) |
 | Qwen2-MoE | `adapter-qwen-moe` | [`katuni4ka/tiny-random-qwen1.5-moe`](https://huggingface.co/katuni4ka/tiny-random-qwen1.5-moe) |
 | Qwen3-MoE | `adapter-qwen3-moe` | [`tiny-random/qwen3-moe`](https://huggingface.co/tiny-random/qwen3-moe) |
+| DeepSeek-V2 (MLA + DeepSeekMoE) | `adapter-deepseek-v2` | [`yujiepan/deepseek-v2-0628-tiny-random`](https://huggingface.co/yujiepan/deepseek-v2-0628-tiny-random) |
+| Gemma 4 (text decoder only) | `adapter-gemma4` | [`google/gemma-4-E2B`](https://huggingface.co/google/gemma-4-E2B) (real, structure-only) |
+| Qwen3.5 / Qwen3.8 (text decoder only) | `adapter-qwen3-5` | [`tiny-random/qwen3.5`](https://huggingface.co/tiny-random/qwen3.5) |
 
 These are all deliberately tiny (randomly-initialized, few-layer) test
 checkpoints, chosen so the full model can be loaded and explored instantly
@@ -194,20 +281,31 @@ DeepSeek's MoE/latent-attention architectures), so `adapter-llama` already
 loads it — see
 [`yujiepan/deepseek-llm-tiny-random`](https://huggingface.co/yujiepan/deepseek-llm-tiny-random).
 
-Sparse Mixture-of-Experts is supported (Qwen2-MoE and Qwen3-MoE above: a
-router, a bank of expert FFNs, and — for checkpoints that have one — an
-always-on shared expert, all real graph nodes with a real forward pass, not
-a placeholder; a checkpoint doesn't even have to route every layer —
-Qwen3-MoE's `decoder_sparse_step`/`mlp_only_layers` fields, honored exactly
-as config.json states them, leave some layers as plain dense FFNs).
-What's still out of scope is full-size, multimodal, or state-space/hybrid
-architectures (e.g. Gemma 3n/4, GLM-4.5V, GLM-5, Qwen-VL, Llama 4,
-Phi-4-flash, Bamba, Qwen3.5-MoE's hybrid linear-attention design, or a
-production-scale MoE like Mixtral/DeepSeek-V3) —
-these need either genuinely large-checkpoint streaming (this MVP downloads
-a whole safetensors file up front) or Model IR extensions this project
-doesn't have yet (multi-head latent attention, vision towers,
-Mamba/state-space layers), rather than just another adapter.
+Sparse Mixture-of-Experts is supported (Qwen2-MoE, Qwen3-MoE, and
+DeepSeek-V2's DeepSeekMoE: a router, a bank of expert FFNs, and — for
+checkpoints that have one — an always-on shared expert, all real graph
+nodes with a real forward pass, not a placeholder; a checkpoint doesn't
+even have to route every layer — Qwen3-MoE's
+`decoder_sparse_step`/`mlp_only_layers` fields, honored exactly as
+config.json states them, leave some layers as plain dense FFNs).
+DeepSeek-V2's Multi-head Latent Attention and Qwen3.5/Qwen3.8's hybrid
+linear/recurrent attention decoder are both supported too, as real Model
+IR extensions rather than another `adapter-llama-family` flag.
+
+For a genuinely multimodal checkpoint (Gemma 4, Qwen3.5/Qwen3.8), only
+the text decoder is loaded — the vision (and, for Gemma 4, audio) towers
+are parsed out of the checkpoint's structure but never rendered or run,
+since neither this app's graph/Inspector nor its forward-pass machinery
+understand a non-transformer tower yet. What's still fully out of scope
+is full-size checkpoints without any adapter path at all (a production
+MoE like Mixtral or DeepSeek-V3), other multimodal/vision architectures
+(GLM-4.5V, GLM-5, Qwen-VL, Llama 4's vision tower), and genuine
+state-space/Mamba architectures (Bamba, Phi-4-flash) — the vision-tower
+case needs real Model IR extensions (patch embedding, a non-causal
+attention variant, image-token splicing into the text sequence) this
+project doesn't have yet, and a production-scale MoE needs genuinely
+large-checkpoint streaming this MVP's upfront-download `WeightProvider`
+doesn't do.
 
 ## Getting started
 
@@ -290,7 +388,10 @@ it's just a file server.
    the minimal case and `gemma`/`phi` for ones with real option overrides
    (embedding scaling, fused projections, QK-Norm, etc). Otherwise,
    implement `buildGraph`/`runInference` directly with
-   `@tensorium/nn-ops`'s primitives.
+   `@tensorium/nn-ops`'s primitives — see `deepseek-v2`, `gemma4`, and
+   `qwen3-5` for real examples of architectures structurally different
+   enough to need this (Multi-head Latent Attention, per-layer frozen
+   K/V reuse, a linear/recurrent attention mechanism).
 3. Register the adapter (and, optionally, a preset checkpoint) in
    `apps/web/src/adapters.ts`.
 
@@ -326,13 +427,20 @@ project's own reimplementation of the same idea.
 - Only OLMo (v1) is supported; OLMo 2 uses a different block topology
   (RMSNorm applied after each sub-layer instead of before it, plus
   per-head QK-norm) that needs its own adapter.
-- Multimodal architectures, and MoE checkpoints large enough to need
-  streamed (not upfront-downloaded) weights, aren't supported (see
-  [Supported architectures](#supported-architectures)).
-- Only Qwen2-MoE and Qwen3-MoE's variants of sparse MoE are implemented;
-  other MoE families (Mixtral-style, DeepSeek-style, Qwen3.5-MoE's hybrid
-  linear-attention design) need their own adapter — and likely real Model
-  IR extensions, not just another `adapter-llama-family` option.
+- A genuinely multimodal checkpoint's vision/audio towers are never
+  loaded — only the text decoder (see [Supported
+  architectures](#supported-architectures)) — and a production-scale MoE
+  checkpoint too large for this MVP's upfront-download `WeightProvider`
+  isn't supported either.
+- Only Qwen2-MoE, Qwen3-MoE, and DeepSeek-V2's DeepSeekMoE variants of
+  sparse MoE are implemented; other MoE families (Mixtral-style) need
+  their own adapter.
+- Any structure-only model over 20 GB (see the preset list) can't run
+  even a synthetic forward pass — the option to allow one is disabled
+  outright above that size, since fabricating and multiplying random
+  values through tens of gigabytes of "weights" isn't worth the browser
+  memory or time it'd cost for a model whose real weights were never
+  downloaded in the first place.
 - Token attribution is occlusion-based only — no gradient-based
   attribution.
 - The IndexedDB cache is per-browser, not shared across users or devices —
@@ -354,7 +462,8 @@ Face for `transformers`, `safetensors`, and the model hub that makes a
 config.json + safetensors pair a reliable, inspectable source of truth
 for a given architecture.
 
-The architecture graph is rendered with [React
+The architecture graph is laid out with [ELK](https://eclipse.dev/elk/)
+(via [`elkjs`](https://github.com/kieler/elkjs)) and rendered with [React
 Flow](https://reactflow.dev/).
 
 ## License

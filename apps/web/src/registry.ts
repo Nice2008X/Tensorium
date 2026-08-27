@@ -100,6 +100,12 @@ export const componentRegistry: Record<NodeType, NodeTypeInfo> = {
     formula: "Attention(Q, K, V) = softmax(QKᵀ / √d_k) V",
     category: "other",
   },
+  linear_attention: {
+    label: "Linear Attention",
+    color: "#dc2626",
+    description: "A recurrent alternative to ordinary attention (e.g. Gated DeltaNet): instead of comparing every token against every other token, it keeps a running per-head state that's updated one token at a time and read out against the query — linear in sequence length instead of quadratic.",
+    category: "other",
+  },
   q_projection: {
     label: "Q Projection",
     color: "#f59e0b",
