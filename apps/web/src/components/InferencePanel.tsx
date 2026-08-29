@@ -102,16 +102,20 @@ export function InferencePanel({
 
       {state.status === "ready" && state.displayTokens && (
         <div className="token-chips">
-          {state.displayTokens.map((t, i) => (
-            <button
-              key={i}
-              className={"token-chip" + (i === selectedTokenIndex ? " selected" : "")}
-              onClick={() => onSelectToken(i)}
-              title={`position ${i}`}
-            >
-              {t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}
-            </button>
-          ))}
+          {state.displayTokens.map((t, i) => {
+            const id = state.result?.tokenIds[i];
+            return (
+              <button
+                key={i}
+                className={"token-chip" + (i === selectedTokenIndex ? " selected" : "")}
+                onClick={() => onSelectToken(i)}
+                title={`position ${i}${id !== undefined ? ` · token id ${id}` : ""}`}
+              >
+                <span className="token-chip-text">{t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}</span>
+                {id !== undefined && <span className="token-chip-id">{id}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -133,11 +137,15 @@ export function InferencePanel({
       {compareEnabled && promptBState.status === "error" && <div className="inference-error">{promptBState.error}</div>}
       {compareEnabled && promptBState.status === "ready" && promptBState.displayTokens && (
         <div className="token-chips token-chips-b">
-          {promptBState.displayTokens.map((t, i) => (
-            <span key={i} className="token-chip token-chip-readonly">
-              {t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}
-            </span>
-          ))}
+          {promptBState.displayTokens.map((t, i) => {
+            const id = promptBState.result?.tokenIds[i];
+            return (
+              <span key={i} className="token-chip token-chip-readonly" title={id !== undefined ? `position ${i} · token id ${id}` : undefined}>
+                <span className="token-chip-text">{t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}</span>
+                {id !== undefined && <span className="token-chip-id">{id}</span>}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>

@@ -7,6 +7,8 @@ export interface InferenceState {
   error?: string;
   result?: ActivationCapture;
   displayTokens?: string[];
+  /** Wall-clock time of the `adapter.runInference` call itself (not tokenization) — a real browser measurement, not an estimate. */
+  elapsedMs?: number;
 }
 
 export function useInference(model: Model | undefined, weightProvider: WeightProvider | undefined, adapter: ModelAdapter | undefined, tokenizer: Tokenizer | undefined) {
@@ -23,8 +25,10 @@ export function useInference(model: Model | undefined, weightProvider: WeightPro
       try {
         const { ids, displayTokens } = tokenizer.encode(prompt);
         if (ids.length === 0) throw new Error("Prompt tokenized to zero tokens — try a non-empty prompt.");
+        const start = performance.now();
         const result = await adapter.runInference(model, weightProvider, ids);
-        setState({ status: "ready", result, displayTokens });
+        const elapsedMs = performance.now() - start;
+        setState({ status: "ready", result, displayTokens, elapsedMs });
       } catch (err) {
         setState({ status: "error", error: err instanceof Error ? err.message : String(err) });
       }

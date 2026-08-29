@@ -674,10 +674,14 @@ input, select { font-family: inherit; }
   align-items: center;
   gap: 24px;
   padding: 10px 16px;
+  /* Reserves room for .top-right-controls, an absolutely-positioned sibling
+     anchored to the same top-right corner — without this the Runtime group
+     (see .model-info-group:last-child) would only start shrinking once
+     already underneath those buttons instead of before reaching them. */
+  padding-right: 360px;
   background: var(--bg-surface-alt);
   border-bottom: 1px solid var(--border-subtle);
   position: relative;
-  overflow-x: auto;
 }
 .model-info-name { font-weight: 700; font-size: 14px; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
 .model-info-structure-badge {
@@ -691,10 +695,15 @@ input, select { font-family: inherit; }
   padding: 2px 8px;
   cursor: help;
 }
-.model-info-stats { display: flex; gap: 20px; }
-.model-info-stat { text-align: left; white-space: nowrap; }
-.model-info-stat-value { font-weight: 600; font-size: 13px; }
-.model-info-stat-label { color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.model-info-groups { display: flex; gap: 28px; min-width: 0; flex: 1 1 auto; }
+.model-info-group { flex-shrink: 0; text-align: left; white-space: nowrap; }
+.model-info-group-label { color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+.model-info-group-value { font-weight: 600; font-size: 12px; }
+/* The rightmost group (Runtime, closest to .top-right-controls) is the one
+   allowed to give up space first — it shrinks and ellipsizes instead of the
+   row overflowing under the buttons or the earlier groups getting squeezed. */
+.model-info-group:last-child { flex: 1 1 auto; min-width: 60px; overflow: hidden; }
+.model-info-group:last-child .model-info-group-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* --- Inference panel --- */
 .inference-panel {
@@ -793,9 +802,22 @@ input, select { font-family: inherit; }
   border-radius: var(--radius-sm);
   font-family: ui-monospace, monospace;
   font-size: 12px;
+  /* Preserves a token's real leading/trailing space (e.g. " dog") instead of
+     collapsing it away — matters for the bare-text chips other panels
+     (LogitLensPanel) render directly as this button's own text, not just
+     the wrapped .token-chip-text span below. */
   white-space: pre;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
+/* The vocabulary index this token was actually looked up at — see
+   InferencePanel's tokenIds. Deliberately its own muted line rather than
+   inline with the text: it's a secondary fact ("here's the number"), not
+   part of the token's own label. */
+.token-chip-id { font-size: 9px; color: var(--text-tertiary); line-height: 1; }
 .token-chip:hover { background: var(--bg-hover); color: var(--text-primary); }
 .token-chip.selected { background: var(--bg-active); border-color: var(--accent); color: var(--text-primary); }
 .token-chip-readonly { cursor: default; opacity: 0.75; }
@@ -867,8 +889,12 @@ input, select { font-family: inherit; }
 .prompt-b-form { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-subtle); }
 .token-chips-b { opacity: 0.85; }
 
-/* --- Body layout + collapsible panes --- */
-.app-body { flex: 1; display: flex; min-height: 0; }
+/* --- Body layout + collapsible panes ---
+   app-main-row: pane-tree | pane-graph | pane-inspector, side by side.
+   pane-tensor (the bottom panel) is its own full-width sibling below this
+   row — not nested inside it — so it spans the tree+chart+inspector width
+   together, with status-footer as the final full-width strip under that. */
+.app-main-row { flex: 1; display: flex; min-height: 0; }
 .pane { border: 1px solid var(--border-hairline); overflow: auto; }
 .pane-tree,
 .pane-inspector {
@@ -889,7 +915,11 @@ input, select { font-family: inherit; }
   overflow: hidden;
   transition: height var(--transition-panel);
 }
-.pane-tensor.resizing { transition: none; }
+.pane-tensor.resizing,
+.pane-tree.resizing,
+.pane-inspector.resizing {
+  transition: none;
+}
 
 .pane-tree.collapsed { width: 36px; }
 .pane-inspector.collapsed { width: 36px; }
@@ -914,7 +944,28 @@ input, select { font-family: inherit; }
 .pane-tensor.resizing .pane-tensor-resize-handle::after {
   background: var(--accent);
 }
+
+/* --- Tree/Inspector drag-to-resize handles (vertical, between panes) --- */
+.pane-resize-handle-vertical {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+}
+.pane-resize-handle-vertical::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  transition: background-color var(--transition-fast);
+}
+.pane-resize-handle-vertical:hover::after,
+.pane-resize-handle-vertical.resizing::after {
+  background: var(--accent);
+}
 .app-resizing-panel { cursor: row-resize; user-select: none; }
+.app-resizing-col-panel { cursor: col-resize; user-select: none; }
 
 /* --- Pane header + collapse control (shared by tree / inspector) --- */
 .pane-header {
@@ -1078,18 +1129,6 @@ input, select { font-family: inherit; }
   padding: 0;
 }
 .graph-breadcrumb button:hover { color: var(--accent-hover); }
-.graph-zoom-indicator {
-  background: rgba(22, 25, 35, 0.85);
-  backdrop-filter: blur(4px);
-  border: 1px solid var(--border-default);
-  padding: 4px 8px;
-  border-radius: var(--radius-md);
-  font-size: 11px;
-  font-family: ui-monospace, monospace;
-  color: var(--text-secondary);
-  box-shadow: var(--shadow-panel);
-  pointer-events: none;
-}
 .control-icon { display: inline-flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1; color: #333; font-family: ui-monospace, monospace; }
 .control-icon.active { color: #2563eb; font-weight: 700; }
 /* Our custom toggle buttons default to sitting flush against each other
@@ -1166,6 +1205,17 @@ input, select { font-family: inherit; }
 
 /* --- Inspector --- */
 .inspector { padding: 14px; overflow-y: auto; height: 100%; }
+.inspector-back-link {
+  display: block;
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 10px;
+}
+.inspector-back-link:hover { text-decoration: underline; }
 .inspector-title {
   border-left: 3px solid;
   padding-left: 10px;
@@ -1181,13 +1231,22 @@ input, select { font-family: inherit; }
 }
 .inspector-name { display: block; font-weight: 700; font-size: 14px; }
 .inspector-section { margin-bottom: 16px; }
+.inspector-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .inspector-section-title {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-tertiary);
-  margin-bottom: 6px;
 }
+.inspector-section-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px;
+}
+.inspector-section-collapse-btn:hover { color: var(--text-primary); }
 .inspector-section p { margin: 0; line-height: 1.5; color: var(--text-secondary); }
 .inspector-actions { display: flex; gap: 8px; margin-bottom: 16px; }
 .inspector-actions button {
@@ -1211,6 +1270,20 @@ input, select { font-family: inherit; }
   white-space: pre-wrap;
 }
 .input-source-list { margin: 4px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+
+/* --- Inspector "This run" Input/Output tensor previews --- */
+.inspector-io-group { margin-bottom: 10px; }
+.inspector-io-group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 4px; }
+.inspector-io-item + .inspector-io-item { margin-top: 8px; }
+.inspector-io-item-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspector-tensor-thumb { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+/* Overrides .heatmap-canvas's own (much larger) max-width/max-height — this
+   is a glance-sized preview inside a narrow sidebar, not the primary
+   full-size view Tensor Explorer already provides for the same tensor. */
+.inspector-tensor-thumb .heatmap-canvas { max-width: 100%; max-height: 90px; }
+.inspector-tensor-thumb .heatmap-downsample-note { display: none; }
+.inspector-tensor-thumb-shape { font-size: 10px; font-family: ui-monospace, monospace; color: var(--text-tertiary); }
+.inspector-tensor-empty { margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic; }
 .io-row {
   display: flex;
   justify-content: space-between;
@@ -1222,8 +1295,25 @@ input, select { font-family: inherit; }
 .io-label { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .io-shape { color: var(--text-primary); font-family: ui-monospace, monospace; flex-shrink: 0; }
 
+/* --- Inspector: no-selection model overview --- */
+.inspector-overview-title { font-weight: 700; font-size: 14px; margin-bottom: 14px; }
+.overview-structure-row { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 3px 0; }
+.overview-structure-label { width: 40%; flex-shrink: 0; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-structure-value { color: var(--text-primary); font-family: ui-monospace, monospace; flex-shrink: 0; }
+/* Overrides .io-shape's flex-shrink: 0 — the decoded-prompt preview is the
+   one "This run"/"Last run" value that can be arbitrarily long, so unlike
+   every fixed-width shape/count value next to it, it needs to actually
+   shrink and ellipsize instead of overflowing the panel. */
+.overview-prompt-preview { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+.overview-hint { margin: 4px 0 0; color: var(--text-tertiary); font-size: 11px; }
+
 /* --- Tensor explorer --- */
-.tensor-explorer { display: flex; flex: 1; min-height: 0; }
+/* tensor-explorer: a column — the Weights/Activations/Compare tab strip
+   spans the full width up top, then tensor-explorer-body (the actual
+   list+detail split, list only present for Weights) fills the rest. */
+.tensor-explorer { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tensor-explorer > .source-tabs { padding: 12px 16px 0; flex-shrink: 0; }
+.tensor-explorer-body { display: flex; flex: 1; min-height: 0; }
 .tensor-explorer-list {
   width: 280px;
   flex-shrink: 0;
@@ -1276,9 +1366,14 @@ input, select { font-family: inherit; }
 .source-tabs button:hover:not(:disabled):not(.active) { color: var(--text-primary); }
 .source-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .source-tabs button:disabled { opacity: 0.4; cursor: not-allowed; }
+/* The secondary Prompt A/B row directly under the main source-tabs row —
+   tucked close underneath rather than getting the same bottom margin,
+   which read as a second unrelated tab strip instead of a sub-choice. */
+.activation-source-tabs { margin-top: -6px; }
 
 .tensor-header { margin-bottom: 8px; }
-.tensor-title { font-family: ui-monospace, monospace; font-weight: 600; font-size: 13px; }
+.tensor-title { font-family: ui-monospace, monospace; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.tensor-title-prompt-tag { font-family: sans-serif; font-size: 10px; font-weight: 600; color: var(--text-tertiary); background: var(--bg-hover); border-radius: var(--radius-sm); padding: 1px 6px; }
 .tensor-meta { display: flex; gap: 14px; font-size: 11px; color: var(--text-secondary); margin-top: 4px; flex-wrap: wrap; }
 .loaded-badge { color: var(--success); }
 
@@ -1310,6 +1405,21 @@ input, select { font-family: inherit; }
 .raw-grid-scroll { max-width: 520px; max-height: 320px; overflow: auto; border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
 .raw-grid { border-collapse: collapse; font-size: 10px; font-family: ui-monospace, monospace; }
 .raw-grid td { border: 1px solid var(--border-hairline); padding: 2px 5px; text-align: right; color: var(--text-secondary); }
+
+.per-token-vectors { display: flex; flex-direction: column; gap: 4px; max-width: 560px; max-height: 320px; overflow-y: auto; }
+.per-token-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-hairline);
+  flex-wrap: wrap;
+}
+.per-token-label { font-family: ui-monospace, monospace; font-weight: 600; color: var(--text-primary); flex-shrink: 0; }
+.per-token-arrow { color: var(--text-tertiary); flex-shrink: 0; }
+.per-token-vector { font-family: ui-monospace, monospace; color: var(--accent-soft-text); }
+.per-token-dims { color: var(--text-tertiary); font-size: 10px; flex-shrink: 0; }
 
 .tensor-stats { min-width: 220px; }
 .stat-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; border-bottom: 1px solid var(--border-hairline); }
@@ -1482,3 +1592,31 @@ input, select { font-family: inherit; }
 .rank-delta { width: 70px; text-align: right; font-size: 11px; }
 .rank-delta-up { color: var(--success); }
 .rank-delta-down { color: var(--danger); }
+
+/* --- Status footer --- */
+.status-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 16px;
+  background: var(--bg-surface-alt);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, monospace;
+}
+.status-footer-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.status-footer-dot-ready { background: var(--success); }
+.status-footer-dot-busy { background: var(--accent); animation: status-footer-pulse 1.2s ease-in-out infinite; }
+.status-footer-dot-error { background: var(--danger); }
+@keyframes status-footer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.status-footer-status { font-weight: 600; color: var(--text-primary); font-family: inherit; }
+.status-footer-title { font-family: inherit; color: var(--text-primary); font-weight: 600; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+.status-footer-item { white-space: nowrap; }
+.status-footer-sep { width: 1px; height: 12px; background: var(--border-default); flex-shrink: 0; }
+.status-footer-spacer { flex: 1; }
+.status-footer-compute { color: var(--text-tertiary); cursor: help; }

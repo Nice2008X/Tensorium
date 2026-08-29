@@ -9,7 +9,6 @@ import ReactFlow, {
   Handle,
   MarkerType,
   MiniMap,
-  Panel,
   Position,
   type Edge as RFEdge,
   type EdgeProps,
@@ -38,6 +37,8 @@ interface Props {
   /** Whether the surrounding panels (prediction, tree, inspector, bottom) are currently collapsed to give the graph maximum space. */
   isMaxFrame: boolean;
   onToggleMaxFrame: () => void;
+  /** Mirrors the on-canvas zoom badge out to the caller — e.g. so the app-wide status footer can show the current zoom without duplicating React Flow's own viewport tracking. */
+  onZoomChange?: (percent: number) => void;
 }
 
 interface IRNodeData {
@@ -253,7 +254,7 @@ function resolveKind(e: { kind?: EdgeKind; label?: string }): EdgeKind {
   return e.kind ?? (e.label === "skip" ? "residual" : "data");
 }
 
-export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBlock, onExitBlock, isMaxFrame, onToggleMaxFrame }: Props) {
+export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBlock, onExitBlock, isMaxFrame, onToggleMaxFrame, onZoomChange }: Props) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null);
@@ -275,6 +276,10 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
   // interaction (scroll, pinch, the Controls +/- buttons, and fitView's own
   // programmatic moves alike).
   const [zoomPercent, setZoomPercent] = useState(100);
+  // Fires for every change regardless of which handler (onInit's first
+  // read, or onMove's ongoing pan/zoom updates below) caused it, rather
+  // than duplicating the callback at each call site.
+  useEffect(() => onZoomChange?.(zoomPercent), [zoomPercent, onZoomChange]);
 
   const { nodeIds: rawNodeIds, edgeList: rawEdgeList } = useMemo(() => {
     if (view.kind === "architecture") {
@@ -620,6 +625,18 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
     };
   }, [selectedId, nodeIds, model, positions, edgeList, elkResult, skipLaneX]);
 
+  // Memoized rather than a fresh `[...a, ...b, ...c]` spread inline in the
+  // JSX below: React Flow is a controlled component that re-derives its own
+  // internal node store from whatever array identity this prop has, and
+  // this component already re-renders on every zoom/pan tick (zoomPercent
+  // changes on every onMove below) — a brand-new array on every one of
+  // those re-renders, even with identical contents, is unnecessary Flow-side
+  // churn this avoids.
+  const allNodes: RFNode[] = useMemo(
+    () => [...(scopeBoxNode ? [scopeBoxNode] : []), ...rfNodes, ...junctionNodes] as RFNode[],
+    [scopeBoxNode, rfNodes, junctionNodes]
+  );
+
   const rfEdges: RFEdge[] = useMemo(
     () =>
       edgeList.map((e) => {
@@ -810,7 +827,7 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
       <div style={{ visibility: elkResult ? "visible" : "hidden", width: "100%", height: "100%" }}>
         <ReactFlow
           key={viewKey}
-          nodes={[...(scopeBoxNode ? [scopeBoxNode] : []), ...rfNodes, ...junctionNodes] as RFNode[]}
+          nodes={allNodes}
           edges={rfEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
@@ -829,9 +846,6 @@ export function ArchitectureGraph({ model, view, selectedId, onSelect, onEnterBl
           elementsSelectable
         >
           <Background />
-          <Panel position="top-right" className="graph-zoom-indicator">
-            {zoomPercent}%
-          </Panel>
           <MiniMap pannable zoomable nodeColor={(n) => (n.data as Partial<IRNodeData> | undefined)?.color ?? "#6b7280"} maskColor="rgba(15, 17, 23, 0.6)" />
           <Controls showInteractive={false}>
             <ControlButton onClick={onToggleMaxFrame} title={isMaxFrame ? t("graph.restorePanels") : t("graph.maximizeGraph")}>

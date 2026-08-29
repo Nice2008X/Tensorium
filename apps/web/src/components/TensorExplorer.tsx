@@ -35,7 +35,7 @@ function entryKey(p: ParamEntry): string {
   return `${p.ownerId}:${parameterKey(p.ref)}`;
 }
 
-type ViewMode = "heatmap" | "matrix" | "histogram";
+type ViewMode = "heatmap" | "matrix" | "histogram" | "tokens";
 type Source = "weights" | "activations" | "compare";
 
 const MAX_MATRIX_CELLS = 128 * 128; // beyond this, the Matrix tab is disabled rather than freezing the tab
@@ -63,6 +63,13 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
   const [windowRanges, setWindowRanges] = useState<{ start: number; end: number }[] | null>(null);
   const [view, setView] = useState<ViewMode>("heatmap");
   const [source, setSource] = useState<Source>("weights");
+  // Which prompt's own activation the "Activations" tab shows — independent
+  // of "Compare", which always shows both at once (plus their diff) rather
+  // than one at a time at full detail (Matrix/Histogram, full stats). Reset
+  // to A whenever B's result goes away (Compare disabled, or B re-run and
+  // not yet ready again) so this doesn't silently keep pointing at a stale
+  // or now-absent result.
+  const [activationSource, setActivationSource] = useState<"A" | "B">("A");
 
   // a freshly-finished run is almost always what the user wants to look at next
   useEffect(() => {
@@ -112,9 +119,19 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
     };
   }, [source, selectedEntry, windowRanges, weightProvider]);
 
-  const activationTensor = source === "activations" && selectedNode ? inference?.result?.activations[selectedNode.id] ?? null : null;
+  const hasInferenceResult = inference?.status === "ready" && !!inference.result;
+  const hasPromptB = promptBInference?.status === "ready" && !!promptBInference.result;
+
+  // Falls back to A automatically once B's result is gone — otherwise this
+  // tab would keep pointing at a source that no longer has anything to show.
+  useEffect(() => {
+    if (activationSource === "B" && !hasPromptB) setActivationSource("A");
+  }, [activationSource, hasPromptB]);
+
+  const activeInference = activationSource === "B" ? promptBInference : inference;
+  const activationTensor = source === "activations" && selectedNode ? activeInference?.result?.activations[selectedNode.id] ?? null : null;
   const activationStats = useMemo(() => (activationTensor ? computeStats(activationTensor.data) : null), [activationTensor]);
-  const attentionTensor = source === "activations" && selectedNode ? inference?.result?.attentionWeights[selectedNode.id] ?? null : null;
+  const attentionTensor = source === "activations" && selectedNode ? activeInference?.result?.attentionWeights[selectedNode.id] ?? null : null;
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -128,14 +145,17 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
   const displayTensor = source === "weights" ? tensor : activationTensor;
   const displayStats = source === "weights" ? stats : activationStats;
   const canShowMatrix = !!displayTensor && displayTensor.data.length <= MAX_MATRIX_CELLS;
+  // Only meaningful for an activation whose rows are literally "one per
+  // token" — a weight tensor's rows aren't tokens, and a 1D tensor (e.g. a
+  // LayerNorm bias) has no per-token axis at all.
+  const canShowTokens =
+    source === "activations" && !!displayTensor && displayTensor.shape.length === 2 && !!activeInference?.displayTokens && displayTensor.shape[0] === activeInference.displayTokens.length;
 
   // keep the active tab valid as the selection changes (e.g. a 1-value bias has no useful histogram)
   useEffect(() => {
     if (view === "matrix" && !canShowMatrix) setView("heatmap");
-  }, [view, canShowMatrix]);
-
-  const hasInferenceResult = inference?.status === "ready" && !!inference.result;
-  const hasPromptB = promptBInference?.status === "ready" && !!promptBInference.result;
+    if (view === "tokens" && !canShowTokens) setView("heatmap");
+  }, [view, canShowMatrix, canShowTokens]);
 
   const compare = useMemo(() => {
     if (source !== "compare" || !selectedNode || !inference?.result || !promptBInference?.result) return null;
@@ -157,55 +177,76 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
 
   return (
     <div className="tensor-explorer">
-      {source === "weights" && (
-        <div className="tensor-explorer-list">
-          <input
-            className="search-input"
-            placeholder="Search parameters (e.g. attn, ln_1, wte)…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="param-list-count">
-            {filtered.length} of {allParams.length} parameter tensors
-          </div>
-          <div className="param-list">
-            {filtered.map((p) => {
-              const key = entryKey(p);
-              return (
-                <button
-                  key={key}
-                  className={"param-item" + (key === selectedKey ? " selected" : "")}
-                  onClick={() => {
-                    setSelectedKey(key);
-                    setWindowRanges(null);
-                  }}
-                >
-                  <div className="param-name">
-                    {p.ref.name}
-                    {p.ref.slice ? <span className="param-slice"> [sliced]</span> : null}
-                  </div>
-                  <div className="param-shape">
-                    {p.ref.logicalShape.join(" × ")} · {p.ref.dtype}
-                  </div>
-                </button>
-              );
-            })}
-            {filtered.length === 0 && <div className="empty-hint">No parameters match.</div>}
-          </div>
+      {hasInferenceResult && (
+        <div className="source-tabs">
+          <button className={source === "weights" ? "active" : ""} onClick={() => setSource("weights")}>
+            Weights
+          </button>
+          <button className={source === "activations" ? "active" : ""} onClick={() => setSource("activations")}>
+            Activations (last run)
+          </button>
+          <button className={source === "compare" ? "active" : ""} disabled={!hasPromptB} onClick={() => setSource("compare")} title={!hasPromptB ? "Run Prompt B first" : undefined}>
+            Compare (A vs B)
+          </button>
         </div>
       )}
 
-      <div className="tensor-explorer-detail">
-        {hasInferenceResult && (
-          <div className="source-tabs">
-            <button className={source === "weights" ? "active" : ""} onClick={() => setSource("weights")}>
-              Weights
+      <div className="tensor-explorer-body">
+        {/* Lives here — inside the Weights tab's own content, below the tab
+            switcher above — rather than as a permanent left rail, since
+            searching/browsing raw parameters only makes sense for Weights;
+            Activations/Compare are always scoped to whatever's selected in
+            the graph/tree instead. */}
+        {source === "weights" && (
+          <div className="tensor-explorer-list">
+            <input
+              className="search-input"
+              placeholder="Search parameters (e.g. attn, ln_1, wte)…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="param-list-count">
+              {filtered.length} of {allParams.length} parameter tensors
+            </div>
+            <div className="param-list">
+              {filtered.map((p) => {
+                const key = entryKey(p);
+                return (
+                  <button
+                    key={key}
+                    className={"param-item" + (key === selectedKey ? " selected" : "")}
+                    onClick={() => {
+                      setSelectedKey(key);
+                      setWindowRanges(null);
+                    }}
+                  >
+                    <div className="param-name">
+                      {p.ref.name}
+                      {p.ref.slice ? <span className="param-slice"> [sliced]</span> : null}
+                    </div>
+                    <div className="param-shape">
+                      {p.ref.logicalShape.join(" × ")} · {p.ref.dtype}
+                    </div>
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && <div className="empty-hint">No parameters match.</div>}
+            </div>
+          </div>
+        )}
+
+        <div className="tensor-explorer-detail">
+        {/* Compare (above) always shows A, B, and their diff together — this
+            is the opposite: one prompt's own activation at a time, at full
+            detail (Matrix/Histogram, full stats), same as picking any other
+            single tensor. */}
+        {source === "activations" && hasPromptB && (
+          <div className="source-tabs activation-source-tabs">
+            <button className={activationSource === "A" ? "active" : ""} onClick={() => setActivationSource("A")}>
+              Prompt A
             </button>
-            <button className={source === "activations" ? "active" : ""} onClick={() => setSource("activations")}>
-              Activations (last run)
-            </button>
-            <button className={source === "compare" ? "active" : ""} disabled={!hasPromptB} onClick={() => setSource("compare")} title={!hasPromptB ? "Run Prompt B first" : undefined}>
-              Compare (A vs B)
+            <button className={activationSource === "B" ? "active" : ""} onClick={() => setActivationSource("B")}>
+              Prompt B
             </button>
           </div>
         )}
@@ -242,11 +283,14 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
         )}
         {source === "activations" && selectedNode && activationTensor && (
           <div className="tensor-header">
-            <div className="tensor-title">{selectedNode.name} — activation</div>
+            <div className="tensor-title">
+              {selectedNode.name} — activation
+              {hasPromptB && <span className="tensor-title-prompt-tag">{activationSource === "A" ? "Prompt A" : "Prompt B"}</span>}
+            </div>
             <div className="tensor-meta">
               <span>Shape {activationTensor.shape.join(" × ")}</span>
               <span>dtype {activationTensor.dtype}</span>
-              <span>from prompt: "{inference?.displayTokens?.join("")}"</span>
+              <span>from prompt: "{activeInference?.displayTokens?.join("")}"</span>
               {structureOnly && (
                 <span className="synthetic-badge" title="Computed from randomly generated weights (this checkpoint's real weights were never downloaded) — not a real forward pass.">
                   Synthetic
@@ -284,12 +328,18 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
                 <button className={view === "histogram" ? "active" : ""} onClick={() => setView("histogram")}>
                   Histogram
                 </button>
+                {canShowTokens && (
+                  <button className={view === "tokens" ? "active" : ""} onClick={() => setView("tokens")}>
+                    Per Token
+                  </button>
+                )}
               </div>
 
               {view === "heatmap" && displayTensor.shape.length === 2 && <Heatmap data={displayTensor.data} rows={displayTensor.shape[0]} cols={displayTensor.shape[1]} />}
               {view === "heatmap" && displayTensor.shape.length === 1 && <Heatmap data={displayTensor.data} rows={1} cols={displayTensor.shape[0]} />}
               {view === "matrix" && canShowMatrix && <RawGrid tensor={displayTensor} />}
               {view === "histogram" && <Histogram stats={displayStats} />}
+              {view === "tokens" && canShowTokens && <PerTokenVectors tensor={displayTensor} tokens={activeInference!.displayTokens!} />}
             </div>
 
             <div className="tensor-stats">
@@ -309,8 +359,8 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
           </div>
         )}
 
-        {source === "activations" && attentionTensor && inference?.displayTokens && (
-          <AttentionView attentionWeights={attentionTensor} tokens={inference.displayTokens} queryTokenIndex={selectedTokenIndex ?? inference.displayTokens.length - 1} />
+        {source === "activations" && attentionTensor && activeInference?.displayTokens && (
+          <AttentionView attentionWeights={attentionTensor} tokens={activeInference.displayTokens} queryTokenIndex={selectedTokenIndex ?? activeInference.displayTokens.length - 1} />
         )}
 
         {source === "compare" && !selectedNode && <div className="empty-hint">Select a component to compare its activation across Prompt A and Prompt B.</div>}
@@ -331,6 +381,7 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
@@ -355,6 +406,47 @@ function StatRow({ label, value }: { label: string; value: string }) {
     <div className="stat-row">
       <span className="stat-label">{label}</span>
       <span className="stat-value">{value}</span>
+    </div>
+  );
+}
+
+// How many of a (typically 32- to several-thousand-dimensional) vector's
+// real values to print per row before truncating with "+N more" — enough to
+// get a feel for the numbers without the row wrapping across the panel.
+const PER_TOKEN_PREVIEW_DIMS = 8;
+
+/**
+ * One row per input token, each showing a prefix of that token's own real
+ * activation vector — e.g. `"cat" → [0.91, 0.12, ...] (+29 more, 32 dims)`.
+ * The plain-numbers alternative to the heatmap above: same underlying
+ * values, no color scale or stats to read, just "here's what this token's
+ * vector actually contains".
+ */
+function PerTokenVectors({ tensor, tokens }: { tensor: Tensor; tokens: string[] }) {
+  const [seqLen, hidden] = tensor.shape;
+  const previewCount = Math.min(PER_TOKEN_PREVIEW_DIMS, hidden);
+  return (
+    <div className="per-token-vectors">
+      {Array.from({ length: seqLen }, (_, i) => {
+        const rowStart = i * hidden;
+        const values: string[] = [];
+        for (let d = 0; d < previewCount; d++) values.push(tensor.data[rowStart + d].toFixed(4));
+        return (
+          <div key={i} className="per-token-row">
+            <span className="per-token-label">"{tokens[i] || "·"}"</span>
+            <span className="per-token-arrow">→</span>
+            <span className="per-token-vector">
+              [{values.join(", ")}
+              {hidden > previewCount ? `, …` : ""}]
+            </span>
+            {hidden > previewCount && (
+              <span className="per-token-dims">
+                +{hidden - previewCount} more · {hidden} dims
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
