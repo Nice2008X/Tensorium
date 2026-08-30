@@ -67,6 +67,7 @@ const en = {
   "loader.localConfigDesc": "Architecture & shape settings",
   "loader.localWeightsDesc": "The model's tensor data",
   "loader.localTokenizerDesc": "Needed only to run inference",
+  "loader.viewOnGithub": "View source on GitHub",
 
   "inference.promptA": "Prompt A",
   "inference.promptB": "Prompt B",
@@ -294,6 +295,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "架构与形状配置",
     "loader.localWeightsDesc": "模型的张量数据",
     "loader.localTokenizerDesc": "仅在运行推理时需要",
+    "loader.viewOnGithub": "在 GitHub 上查看源码",
 
     "inference.promptA": "提示词 A",
     "inference.promptB": "提示词 B",
@@ -516,6 +518,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "Configuración de arquitectura y formas",
     "loader.localWeightsDesc": "Los datos de tensores del modelo",
     "loader.localTokenizerDesc": "Solo necesario para ejecutar inferencia",
+    "loader.viewOnGithub": "Ver el código fuente en GitHub",
 
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
@@ -738,6 +741,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "Paramètres d'architecture et de formes",
     "loader.localWeightsDesc": "Les données tensorielles du modèle",
     "loader.localTokenizerDesc": "Nécessaire uniquement pour l'inférence",
+    "loader.viewOnGithub": "Voir le code source sur GitHub",
 
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
@@ -960,6 +964,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "Architektur- und Formeinstellungen",
     "loader.localWeightsDesc": "Die Tensordaten des Modells",
     "loader.localTokenizerDesc": "Nur für die Inferenz nötig",
+    "loader.viewOnGithub": "Quellcode auf GitHub ansehen",
 
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
@@ -1182,6 +1187,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "アーキテクチャと形状の設定",
     "loader.localWeightsDesc": "モデルのテンソルデータ",
     "loader.localTokenizerDesc": "推論の実行にのみ必要",
+    "loader.viewOnGithub": "GitHub でソースを見る",
 
     "inference.promptA": "プロンプト A",
     "inference.promptB": "プロンプト B",
@@ -1404,6 +1410,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "아키텍처 및 형태 설정",
     "loader.localWeightsDesc": "모델의 텐서 데이터",
     "loader.localTokenizerDesc": "추론 실행 시에만 필요",
+    "loader.viewOnGithub": "GitHub에서 소스 보기",
 
     "inference.promptA": "프롬프트 A",
     "inference.promptB": "프롬프트 B",
@@ -1626,6 +1633,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "Configurações de arquitetura e formas",
     "loader.localWeightsDesc": "Os dados de tensores do modelo",
     "loader.localTokenizerDesc": "Necessário apenas para executar inferência",
+    "loader.viewOnGithub": "Ver código-fonte no GitHub",
 
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
@@ -1848,6 +1856,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.localConfigDesc": "Настройки архитектуры и форм",
     "loader.localWeightsDesc": "Тензорные данные модели",
     "loader.localTokenizerDesc": "Нужен только для запуска инференса",
+    "loader.viewOnGithub": "Посмотреть исходный код на GitHub",
 
     "inference.promptA": "Промпт A",
     "inference.promptB": "Промпт B",
