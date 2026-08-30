@@ -1,5 +1,8 @@
 import type { Model, ModelNode } from "@tensorium/model-ir";
 import { componentRegistry } from "./registry.js";
+import type { TranslationKey } from "./i18n.js";
+
+type T = (key: TranslationKey) => string;
 
 export interface InputSource {
   label: string;
@@ -32,13 +35,13 @@ function isAncestor(model: Model, ancestorId: string, node: ModelNode): boolean 
  * resolves to Token Embedding + Positional Embedding (its two real inputs);
  * block N>0's resolves to block N-1 (its predecessor's real output).
  */
-function resolveBoundarySources(model: Model, containerId: string): InputSource[] {
+function resolveBoundarySources(model: Model, containerId: string, t: T): InputSource[] {
   const upstream = model.edges.filter((e) => e.target === containerId);
   if (upstream.length === 0) {
     // No recorded producer for this container (e.g. it's the graph root) —
     // fall back to its own id, still a valid (if less descriptive) lookup
     // key into ActivationCapture.activations.
-    return [{ label: "Block input (from outside this block)", isBlockBoundary: true, sourceId: containerId }];
+    return [{ label: t("nodeInputs.blockInputFallback"), isBlockBoundary: true, sourceId: containerId }];
   }
   return upstream.map((e) => {
     const src = model.nodes[e.source];
@@ -48,7 +51,7 @@ function resolveBoundarySources(model: Model, containerId: string): InputSource[
     // previous block's own output), name that block too so it doesn't read
     // as if it belongs to the block being inspected.
     const name = parent?.type === "transformer_block" ? `${parent.name} → ${src?.name ?? e.source}` : src?.name ?? e.source;
-    return { label: `Block input: ${name}`, isBlockBoundary: true, sourceId: e.source };
+    return { label: t("nodeInputs.blockInputPrefix").replace("{name}", name), isBlockBoundary: true, sourceId: e.source };
   });
 }
 
@@ -77,7 +80,7 @@ function resolveBoundarySources(model: Model, containerId: string): InputSource[
  *   doing real attention math, not a simple combine — its own formula
  *   (shown separately) already covers that, so no operator is guessed here.
  */
-export function describeInputConstruction(model: Model, node: ModelNode): { sources: InputSource[]; operator: "+" | "×" | null } {
+export function describeInputConstruction(model: Model, node: ModelNode, t: T): { sources: InputSource[]; operator: "+" | "×" | null } {
   const incoming = model.edges.filter((e) => e.target === node.id);
   const nonAncestor = incoming.filter((e) => e.label === "skip" || !isAncestor(model, e.source, node));
   // Container-sourced edges only survive if nothing more specific covers
@@ -93,7 +96,7 @@ export function describeInputConstruction(model: Model, node: ModelNode): { sour
     // resolveBoundarySources) since the container's *own* captured
     // activation is its output, not this boundary's input value.
     const boundary = isAncestor(model, e.source, node);
-    return boundary ? resolveBoundarySources(model, e.source) : [{ label: model.nodes[e.source]?.name ?? e.source, isBlockBoundary: false, sourceId: e.source }];
+    return boundary ? resolveBoundarySources(model, e.source, t) : [{ label: model.nodes[e.source]?.name ?? e.source, isBlockBoundary: false, sourceId: e.source }];
   });
 
   if (sources.length < 2) return { sources, operator: null };

@@ -8,6 +8,7 @@ import { AttentionView } from "./AttentionView.js";
 import { composeSlice, defaultWindow, parameterKey } from "../tensor.js";
 import type { InferenceState } from "../useInference.js";
 import { describeInputConstruction } from "../nodeInputs.js";
+import { useTranslation } from "./LanguageContext.js";
 
 /**
  * A one-shot request to switch tabs from outside — e.g. Inspector's "View
@@ -58,6 +59,7 @@ function formatBytes(n: number): string {
 }
 
 export function TensorExplorer({ model, weightProvider, selectedNode, inference, selectedTokenIndex, promptBInference, sourceRequest, structureOnly }: Props) {
+  const { t } = useTranslation();
   const allParams = useMemo<ParamEntry[]>(() => {
     const list: ParamEntry[] = [];
     for (const node of Object.values(model.nodes)) {
@@ -166,7 +168,7 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
   // "This run" sections use, so the Input/Output tab's source picker always
   // agrees with what Inspector says feeds this node — including the "This
   // run" deep-link, which passes exactly one of these `sourceId`s through.
-  const inputSources = useMemo(() => (selectedNode ? describeInputConstruction(model, selectedNode).sources : []), [model, selectedNode]);
+  const inputSources = useMemo(() => (selectedNode ? describeInputConstruction(model, selectedNode, t).sources : []), [model, selectedNode, t]);
   const activeIoSourceId = ioSourceId ?? inputSources[0]?.sourceId ?? null;
   const ioTensor =
     source === "io" && selectedNode
@@ -230,16 +232,16 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
       {hasInferenceResult && (
         <div className="source-tabs">
           <button className={source === "weights" ? "active" : ""} onClick={() => setSource("weights")}>
-            Weights
+            {t("tensor.weights")}
           </button>
           <button className={source === "activations" ? "active" : ""} onClick={() => setSource("activations")}>
-            Activations (last run)
+            {t("tensor.activationsLastRun")}
           </button>
           <button className={source === "io" ? "active" : ""} onClick={() => setSource("io")}>
-            Input/Output
+            {t("tensor.inputOutput")}
           </button>
-          <button className={source === "compare" ? "active" : ""} disabled={!hasPromptB} onClick={() => setSource("compare")} title={!hasPromptB ? "Run Prompt B first" : undefined}>
-            Compare (A vs B)
+          <button className={source === "compare" ? "active" : ""} disabled={!hasPromptB} onClick={() => setSource("compare")} title={!hasPromptB ? t("tensor.runPromptBFirst") : undefined}>
+            {t("tensor.compareAvB")}
           </button>
         </div>
       )}
@@ -254,13 +256,11 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
           <div className="tensor-explorer-list">
             <input
               className="search-input"
-              placeholder="Search parameters (e.g. attn, ln_1, wte)…"
+              placeholder={t("tensor.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <div className="param-list-count">
-              {filtered.length} of {allParams.length} parameter tensors
-            </div>
+            <div className="param-list-count">{t("tensor.paramCount").replace("{filtered}", String(filtered.length)).replace("{total}", String(allParams.length))}</div>
             <div className="param-list">
               {filtered.map((p) => {
                 const key = entryKey(p);
@@ -275,7 +275,7 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
                   >
                     <div className="param-name">
                       {p.ref.name}
-                      {p.ref.slice ? <span className="param-slice"> [sliced]</span> : null}
+                      {p.ref.slice ? <span className="param-slice"> {t("tensor.slicedSuffix")}</span> : null}
                     </div>
                     <div className="param-shape">
                       {p.ref.logicalShape.join(" × ")} · {p.ref.dtype}
@@ -283,7 +283,7 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
                   </button>
                 );
               })}
-              {filtered.length === 0 && <div className="empty-hint">No parameters match.</div>}
+              {filtered.length === 0 && <div className="empty-hint">{t("tensor.noParamsMatch")}</div>}
             </div>
           </div>
         )}
@@ -296,10 +296,10 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
         {source === "io" && (
           <div className="source-tabs io-subtab-tabs">
             <button className={ioSubTab === "input" ? "active" : ""} disabled={!selectedNode || inputSources.length === 0} onClick={() => setIoSubTab("input")}>
-              Input
+              {t("tensor.input")}
             </button>
             <button className={ioSubTab === "output" ? "active" : ""} onClick={() => setIoSubTab("output")}>
-              Output
+              {t("tensor.output")}
             </button>
           </div>
         )}
@@ -319,46 +319,46 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
         {(source === "activations" || source === "io") && hasPromptB && (
           <div className="source-tabs activation-source-tabs">
             <button className={activationSource === "A" ? "active" : ""} onClick={() => setActivationSource("A")}>
-              Prompt A
+              {t("inference.promptA")}
             </button>
             <button className={activationSource === "B" ? "active" : ""} onClick={() => setActivationSource("B")}>
-              Prompt B
+              {t("inference.promptB")}
             </button>
           </div>
         )}
 
-        {source === "weights" && !ref && <div className="empty-hint">Select a component with weights to inspect its tensor.</div>}
-        {source === "activations" && !selectedNode && <div className="empty-hint">Select a component to inspect its activation from the last forward pass.</div>}
+        {source === "weights" && !ref && <div className="empty-hint">{t("tensor.selectWeightsHint")}</div>}
+        {source === "activations" && !selectedNode && <div className="empty-hint">{t("tensor.selectActivationHint")}</div>}
         {source === "activations" && selectedNode && !activationTensor && (
-          <div className="empty-hint">No activation was captured for "{selectedNode.name}" — try a leaf computation node (LayerNorm, a projection, the activation function, …).</div>
+          <div className="empty-hint">{t("tensor.noActivationCaptured").replace("{name}", selectedNode.name)}</div>
         )}
-        {source === "io" && !selectedNode && <div className="empty-hint">Select a component to inspect its input/output tensors from the last forward pass.</div>}
+        {source === "io" && !selectedNode && <div className="empty-hint">{t("tensor.selectIoHint")}</div>}
         {source === "io" && selectedNode && ioSubTab === "input" && inputSources.length === 0 && (
-          <div className="empty-hint">"{selectedNode.name}" has no upstream inputs in the graph.</div>
+          <div className="empty-hint">{t("tensor.noUpstreamInputs").replace("{name}", selectedNode.name)}</div>
         )}
         {source === "io" && selectedNode && !ioTensor && (ioSubTab === "output" || inputSources.length > 0) && (
-          <div className="empty-hint">No activation was captured for this tensor — try a leaf computation node (LayerNorm, a projection, the activation function, …).</div>
+          <div className="empty-hint">{t("tensor.noActivationForTensor")}</div>
         )}
 
         {source === "weights" && ref && (
           <div className="tensor-header">
             <div className="tensor-title">
               {ref.name}
-              {ref.slice ? " (sliced)" : ""}
+              {ref.slice ? ` ${t("tensor.slicedTitleSuffix")}` : ""}
             </div>
             <div className="tensor-meta">
-              <span>Shape {ref.logicalShape.join(" × ")}</span>
-              <span>dtype {ref.dtype}</span>
-              <span>{ref.numElements.toLocaleString()} params (full tensor)</span>
-              <span>{formatBytes(ref.bytes)} (full tensor)</span>
+              <span>{t("tensor.shape").replace("{shape}", ref.logicalShape.join(" × "))}</span>
+              <span>{t("tensor.dtype").replace("{dtype}", ref.dtype)}</span>
+              <span>{t("tensor.paramsFullTensor").replace("{n}", ref.numElements.toLocaleString())}</span>
+              <span>{t("tensor.bytesFullTensor").replace("{bytes}", formatBytes(ref.bytes))}</span>
               {structureOnly && (
-                <span className="synthetic-badge" title="This checkpoint's real weights were never downloaded (too large or sharded) — these values are randomly generated, not real.">
-                  Synthetic
+                <span className="synthetic-badge" title={t("tensor.syntheticWeightsTooltip")}>
+                  {t("tensor.syntheticBadge")}
                 </span>
               )}
               {tensor && (
-                <span className="loaded-badge" title="Bytes actually pulled into the browser for the window currently shown">
-                  {formatBytes(loadedBytes)} loaded ({((loadedBytes / ref.bytes) * 100 || 0).toFixed(1)}% of tensor)
+                <span className="loaded-badge" title={t("tensor.loadedBadgeTooltip")}>
+                  {t("tensor.loadedBadge").replace("{loaded}", formatBytes(loadedBytes)).replace("{pct}", ((loadedBytes / ref.bytes) * 100 || 0).toFixed(1))}
                 </span>
               )}
             </div>
@@ -367,16 +367,16 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
         {source === "activations" && selectedNode && activationTensor && (
           <div className="tensor-header">
             <div className="tensor-title">
-              {selectedNode.name} — activation
-              {hasPromptB && <span className="tensor-title-prompt-tag">{activationSource === "A" ? "Prompt A" : "Prompt B"}</span>}
+              {t("tensor.activationTitle").replace("{name}", selectedNode.name)}
+              {hasPromptB && <span className="tensor-title-prompt-tag">{activationSource === "A" ? t("inference.promptA") : t("inference.promptB")}</span>}
             </div>
             <div className="tensor-meta">
-              <span>Shape {activationTensor.shape.join(" × ")}</span>
-              <span>dtype {activationTensor.dtype}</span>
-              <span>from prompt: "{activeInference?.displayTokens?.join("")}"</span>
+              <span>{t("tensor.shape").replace("{shape}", activationTensor.shape.join(" × "))}</span>
+              <span>{t("tensor.dtype").replace("{dtype}", activationTensor.dtype)}</span>
+              <span>{t("tensor.fromPrompt").replace("{tokens}", activeInference?.displayTokens?.join("") ?? "")}</span>
               {structureOnly && (
-                <span className="synthetic-badge" title="Computed from randomly generated weights (this checkpoint's real weights were never downloaded) — not a real forward pass.">
-                  Synthetic
+                <span className="synthetic-badge" title={t("tensor.syntheticActivationTooltip")}>
+                  {t("tensor.syntheticBadge")}
                 </span>
               )}
             </div>
@@ -385,16 +385,17 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
         {source === "io" && selectedNode && ioTensor && (
           <div className="tensor-header">
             <div className="tensor-title">
-              {selectedNode.name} — {ioSubTab === "output" ? "output" : `input (${inputSources.find((s) => s.sourceId === activeIoSourceId)?.label ?? "?"})`}
-              {hasPromptB && <span className="tensor-title-prompt-tag">{activationSource === "A" ? "Prompt A" : "Prompt B"}</span>}
+              {selectedNode.name} —{" "}
+              {ioSubTab === "output" ? t("tensor.ioOutputInline") : t("tensor.ioInputInline").replace("{label}", inputSources.find((s) => s.sourceId === activeIoSourceId)?.label ?? "?")}
+              {hasPromptB && <span className="tensor-title-prompt-tag">{activationSource === "A" ? t("inference.promptA") : t("inference.promptB")}</span>}
             </div>
             <div className="tensor-meta">
-              <span>Shape {ioTensor.shape.join(" × ")}</span>
-              <span>dtype {ioTensor.dtype}</span>
-              <span>from prompt: "{activeInference?.displayTokens?.join("")}"</span>
+              <span>{t("tensor.shape").replace("{shape}", ioTensor.shape.join(" × "))}</span>
+              <span>{t("tensor.dtype").replace("{dtype}", ioTensor.dtype)}</span>
+              <span>{t("tensor.fromPrompt").replace("{tokens}", activeInference?.displayTokens?.join("") ?? "")}</span>
               {structureOnly && (
-                <span className="synthetic-badge" title="Computed from randomly generated weights (this checkpoint's real weights were never downloaded) — not a real forward pass.">
-                  Synthetic
+                <span className="synthetic-badge" title={t("tensor.syntheticActivationTooltip")}>
+                  {t("tensor.syntheticBadge")}
                 </span>
               )}
             </div>
@@ -409,29 +410,29 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
           />
         )}
 
-        {source === "weights" && loading && <div className="empty-hint">Loading tensor…</div>}
+        {source === "weights" && loading && <div className="empty-hint">{t("tensor.loadingTensor")}</div>}
 
         {!loading && displayTensor && displayStats && (
           <div className="tensor-body">
             <div className="tensor-visual">
               <div className="view-tabs">
                 <button className={view === "heatmap" ? "active" : ""} onClick={() => setView("heatmap")}>
-                  Heatmap
+                  {t("tensor.heatmap")}
                 </button>
                 <button
                   className={view === "matrix" ? "active" : ""}
                   disabled={!canShowMatrix}
                   onClick={() => setView("matrix")}
-                  title={!canShowMatrix ? "Too many values to render as a table — narrow the window first" : undefined}
+                  title={!canShowMatrix ? t("tensor.matrixDisabledTooltip") : undefined}
                 >
-                  Matrix
+                  {t("tensor.matrix")}
                 </button>
                 <button className={view === "histogram" ? "active" : ""} onClick={() => setView("histogram")}>
-                  Histogram
+                  {t("tensor.histogram")}
                 </button>
                 {canShowTokens && (
                   <button className={view === "tokens" ? "active" : ""} onClick={() => setView("tokens")}>
-                    Per Token
+                    {t("tensor.perToken")}
                   </button>
                 )}
               </div>
@@ -444,16 +445,22 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
             </div>
 
             <div className="tensor-stats">
-              <StatRow label="Showing" value={`${displayTensor.shape.join(" × ")} (${displayTensor.data.length.toLocaleString()} values)`} />
-              <StatRow label="Min" value={displayStats.min.toFixed(4)} />
-              <StatRow label="Max" value={displayStats.max.toFixed(4)} />
-              <StatRow label="Mean" value={displayStats.mean.toFixed(4)} />
-              <StatRow label="Std" value={displayStats.std.toFixed(4)} />
-              <StatRow label="Sparsity" value={`${(displayStats.sparsity * 100).toFixed(1)}% (${displayStats.zeros.toLocaleString()} zeros)`} />
-              <div className="stat-divider">Percentiles</div>
+              <StatRow
+                label={t("tensor.showing")}
+                value={t("tensor.showingValue").replace("{shape}", displayTensor.shape.join(" × ")).replace("{n}", displayTensor.data.length.toLocaleString())}
+              />
+              <StatRow label={t("tensor.min")} value={displayStats.min.toFixed(4)} />
+              <StatRow label={t("tensor.max")} value={displayStats.max.toFixed(4)} />
+              <StatRow label={t("tensor.mean")} value={displayStats.mean.toFixed(4)} />
+              <StatRow label={t("tensor.std")} value={displayStats.std.toFixed(4)} />
+              <StatRow
+                label={t("tensor.sparsity")}
+                value={t("tensor.sparsityValue").replace("{pct}", (displayStats.sparsity * 100).toFixed(1)).replace("{zeros}", displayStats.zeros.toLocaleString())}
+              />
+              <div className="stat-divider">{t("tensor.percentiles")}</div>
               <StatRow label="p1" value={displayStats.percentiles.p1.toFixed(4)} />
               <StatRow label="p25" value={displayStats.percentiles.p25.toFixed(4)} />
-              <StatRow label="p50 (median)" value={displayStats.percentiles.p50.toFixed(4)} />
+              <StatRow label={t("tensor.p50Median")} value={displayStats.percentiles.p50.toFixed(4)} />
               <StatRow label="p75" value={displayStats.percentiles.p75.toFixed(4)} />
               <StatRow label="p99" value={displayStats.percentiles.p99.toFixed(4)} />
             </div>
@@ -464,21 +471,19 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
           <AttentionView attentionWeights={attentionTensor} tokens={activeInference.displayTokens} queryTokenIndex={selectedTokenIndex ?? activeInference.displayTokens.length - 1} />
         )}
 
-        {source === "compare" && !selectedNode && <div className="empty-hint">Select a component to compare its activation across Prompt A and Prompt B.</div>}
-        {source === "compare" && selectedNode && !compare && (
-          <div className="empty-hint">
-            No 2D activation was captured for "{selectedNode.name}" in both runs — try a leaf computation node (LayerNorm, a projection, the activation function, …).
-          </div>
-        )}
+        {source === "compare" && !selectedNode && <div className="empty-hint">{t("tensor.compareSelectHint")}</div>}
+        {source === "compare" && selectedNode && !compare && <div className="empty-hint">{t("tensor.compareNoActivation").replace("{name}", selectedNode.name)}</div>}
         {source === "compare" && compare && (
           <div className="compare-view">
             {compare.truncated && (
-              <div className="compare-note">Prompt A and B have different token counts here — comparing only the overlapping {compare.diff.shape[0]}×{compare.diff.shape[1]} region.</div>
+              <div className="compare-note">
+                {t("tensor.compareTruncatedNote").replace("{rows}", String(compare.diff.shape[0])).replace("{cols}", String(compare.diff.shape[1]))}
+              </div>
             )}
             <div className="compare-columns">
-              <CompareColumn title="Prompt A" tensor={compare.a} stats={compare.statsA} />
-              <CompareColumn title="Prompt B" tensor={compare.b} stats={compare.statsB} />
-              <CompareColumn title="A − B" tensor={compare.diff} stats={compare.statsDiff} diverging />
+              <CompareColumn title={t("inference.promptA")} tensor={compare.a} stats={compare.statsA} />
+              <CompareColumn title={t("inference.promptB")} tensor={compare.b} stats={compare.statsB} />
+              <CompareColumn title={t("tensor.aMinusB")} tensor={compare.diff} stats={compare.statsDiff} diverging />
             </div>
           </div>
         )}
@@ -489,14 +494,15 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
 }
 
 function CompareColumn({ title, tensor, stats, diverging }: { title: string; tensor: Tensor; stats: TensorStats; diverging?: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="compare-column">
       <div className="compare-column-title">{title}</div>
       <Heatmap data={tensor.data} rows={tensor.shape[0]} cols={tensor.shape[1]} />
       <div className="compare-stats">
-        <StatRow label="Mean" value={stats.mean.toFixed(4)} />
-        <StatRow label="Std" value={stats.std.toFixed(4)} />
-        <StatRow label={diverging ? "Max |Δ|" : "Max"} value={diverging ? Math.max(Math.abs(stats.min), Math.abs(stats.max)).toFixed(4) : stats.max.toFixed(4)} />
+        <StatRow label={t("tensor.mean")} value={stats.mean.toFixed(4)} />
+        <StatRow label={t("tensor.std")} value={stats.std.toFixed(4)} />
+        <StatRow label={diverging ? t("tensor.maxDelta") : t("tensor.max")} value={diverging ? Math.max(Math.abs(stats.min), Math.abs(stats.max)).toFixed(4) : stats.max.toFixed(4)} />
       </div>
     </div>
   );
@@ -524,6 +530,7 @@ const PER_TOKEN_PREVIEW_DIMS = 8;
  * vector actually contains".
  */
 function PerTokenVectors({ tensor, tokens }: { tensor: Tensor; tokens: string[] }) {
+  const { t } = useTranslation();
   const [seqLen, hidden] = tensor.shape;
   const previewCount = Math.min(PER_TOKEN_PREVIEW_DIMS, hidden);
   return (
@@ -541,9 +548,7 @@ function PerTokenVectors({ tensor, tokens }: { tensor: Tensor; tokens: string[] 
               {hidden > previewCount ? `, …` : ""}]
             </span>
             {hidden > previewCount && (
-              <span className="per-token-dims">
-                +{hidden - previewCount} more · {hidden} dims
-              </span>
+              <span className="per-token-dims">{t("tensor.perTokenMore").replace("{more}", String(hidden - previewCount)).replace("{dims}", String(hidden))}</span>
             )}
           </div>
         );
@@ -581,13 +586,14 @@ function WindowControls({
   ranges: { start: number; end: number }[];
   onChange: (ranges: { start: number; end: number }[]) => void;
 }) {
+  const { t } = useTranslation();
   const clamp = (v: number, dim: number) => Math.max(0, Math.min(dim, Math.round(Number.isFinite(v) ? v : 0)));
 
   return (
     <div className="window-controls">
       {shape.map((dim, i) => (
         <label key={i} className="window-dim">
-          dim {i} (0–{dim})
+          {t("tensor.windowDim").replace("{i}", String(i)).replace("{max}", String(dim))}
           <input
             type="number"
             value={ranges[i]?.start ?? 0}

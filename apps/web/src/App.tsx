@@ -324,18 +324,18 @@ export function App() {
   // InferenceProgress) — prefers A when both happen to be running at once,
   // which is rare enough not to need a combined display.
   const footerProgress = runningA ? inference.state.progress : runningB ? promptB.state.progress : undefined;
-  const footerRunningLabel = runningA && runningB ? "Running A & B…" : runningB ? "Running Prompt B…" : "Running…";
+  const footerRunningLabel = runningA && runningB ? t("footer.runningBoth") : runningB ? t("footer.runningB") : t("inference.running");
   const footerStatus: { label: string; tone: "ready" | "busy" | "error" } =
     inference.state.status === "error" || promptB.state.status === "error"
-      ? { label: "Error", tone: "error" }
+      ? { label: t("footer.error"), tone: "error" }
       : footerBusy
-        ? { label: analysisBusy ? "Analyzing…" : footerRunningLabel, tone: "busy" }
-        : { label: "Ready", tone: "ready" };
+        ? { label: analysisBusy ? t("footer.analyzing") : footerRunningLabel, tone: "busy" }
+        : { label: t("footer.ready"), tone: "ready" };
   // The selected node's own block if it's inside one, else whichever block
   // the graph is currently showing the detail view of, else no block
   // context at all (top-level architecture view, nothing selected).
   const footerBlockId = selectedId ? containingBlockId(model, selectedId) : safeView.kind === "block" ? safeView.blockId : null;
-  const footerBlockLabel = footerBlockId ? model.nodes[footerBlockId]?.name : "Architecture view";
+  const footerBlockLabel = footerBlockId ? model.nodes[footerBlockId]?.name : t("footer.architectureView");
   // Selecting a node should change *what's shown*, not just the numbers
   // next to it — "Transformer Block 0" alone doesn't say whether you're
   // looking at its Attention or its FFN. Folds the block context and the
@@ -704,7 +704,10 @@ export function App() {
             forward pass is actually running and the adapter reports it, not
             a simulated/timed fill. */}
         {footerBusy && footerProgress && (
-          <span className="status-footer-item status-footer-progress" title={`Layer ${footerProgress.completed} of ${footerProgress.total}`}>
+          <span
+            className="status-footer-item status-footer-progress"
+            title={t("footer.layerProgress").replace("{completed}", String(footerProgress.completed)).replace("{total}", String(footerProgress.total))}
+          >
             <span className="status-footer-progress-track">
               <span className="status-footer-progress-fill" style={{ width: `${Math.round((footerProgress.completed / footerProgress.total) * 100)}%` }} />
             </span>
@@ -724,12 +727,12 @@ export function App() {
             artifact — so this simply doesn't render rather than showing an
             empty "— norm" next to the two fields above that now do have a
             static, always-real fallback. */}
-        {footerNorm !== undefined && <span className="status-footer-item">{footerNorm.toFixed(4)} norm</span>}
+        {footerNorm !== undefined && <span className="status-footer-item">{t("footer.norm").replace("{value}", footerNorm.toFixed(4))}</span>}
         <span className="status-footer-sep" />
-        <span className="status-footer-item">Zoom {zoomPercent}%</span>
+        <span className="status-footer-item">{t("footer.zoom").replace("{percent}", String(zoomPercent))}</span>
         <span className="status-footer-spacer" />
-        <span className="status-footer-item status-footer-compute" title="Every computation in this app — the forward pass included — runs in plain JavaScript on the CPU; there is no GPU/WebGPU path.">
-          CPU
+        <span className="status-footer-item status-footer-compute" title={t("footer.cpuTooltip")}>
+          {t("footer.cpu")}
         </span>
       </div>
     </div>

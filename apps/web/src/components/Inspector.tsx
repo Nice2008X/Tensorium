@@ -7,6 +7,7 @@ import { topKFromLogits } from "../logits.js";
 import { formatBytes, formatCount, formatPercent } from "../format.js";
 import { useLocalStorageState } from "../useLocalStorageState.js";
 import { describeInputConstruction } from "../nodeInputs.js";
+import { useTranslation } from "./LanguageContext.js";
 
 function formatDims(dims: Array<number | string>): string {
   return `[${dims.join(", ")}]`;
@@ -46,6 +47,7 @@ export function Inspector({
   elapsedMs,
   onDeselect,
 }: Props) {
+  const { t } = useTranslation();
   // Declared unconditionally, above the early return below, so the hook
   // count stays stable across a selection toggling node between a real
   // value and null (React's rules of hooks) — a per-user preference like
@@ -63,7 +65,7 @@ export function Inspector({
   const info = componentRegistry[node.type];
   const totalParams = node.parameters.reduce((a, p) => a + (p.slice ? p.logicalShape.reduce((x, y) => x * y, 1) : p.numElements), 0);
   const hasThisRun = activationShape !== undefined && activationMagnitude !== undefined;
-  const { sources: inputSources, operator: inputOperator } = describeInputConstruction(model, node);
+  const { sources: inputSources, operator: inputOperator } = describeInputConstruction(model, node, t);
   // The root node's own per-node facts (no parameters, no shapes, no
   // incoming edges — every real adapter builds it as a bare container, see
   // e.g. gpt2/graph.ts's `node("model", "model", ...)`) are never
@@ -76,7 +78,7 @@ export function Inspector({
     <div className="inspector">
       {onDeselect && (
         <button type="button" className="inspector-back-link" onClick={onDeselect}>
-          ‹ Model overview
+          {t("inspector.backToOverview")}
         </button>
       )}
       <div className="inspector-title" style={{ borderColor: info.color }}>
@@ -86,17 +88,17 @@ export function Inspector({
         <span className="inspector-name">{node.name}</span>
       </div>
 
-      <Section title="What is it?">
+      <Section title={t("inspector.whatIsIt")}>
         <p>{info.description}</p>
       </Section>
 
       {isRoot && <ModelSummarySections model={model} inferenceResult={inferenceResult} tokenizer={tokenizer} elapsedMs={elapsedMs} />}
 
       {hasThisRun && (
-        <Section title="This run" collapsible collapsed={thisRunCollapsed} onToggleCollapsed={() => setThisRunCollapsed((v) => !v)}>
+        <Section title={t("inspector.thisRun")} collapsible collapsed={thisRunCollapsed} onToggleCollapsed={() => setThisRunCollapsed((v) => !v)}>
           {inputSources.length > 0 && (
             <div className="inspector-io-group">
-              <div className="inspector-io-group-title">Input{inputSources.length > 1 ? "s" : ""}</div>
+              <div className="inspector-io-group-title">{inputSources.length > 1 ? t("inspector.inputs") : t("inspector.input")}</div>
               {inputSources.map((s, i) => (
                 <div key={i} className="inspector-io-item">
                   <div className="inspector-io-item-label" title={s.label}>
@@ -109,11 +111,11 @@ export function Inspector({
                   {inferenceResult?.activations[s.sourceId] ? (
                     onViewInput && (
                       <button type="button" className="inspector-io-link" onClick={() => onViewInput(s.sourceId)}>
-                        View matrix →
+                        {t("inspector.viewMatrix")}
                       </button>
                     )
                   ) : (
-                    <span className="inspector-tensor-empty">Not captured for this run.</span>
+                    <span className="inspector-tensor-empty">{t("inspector.notCaptured")}</span>
                   )}
                 </div>
               ))}
@@ -121,40 +123,44 @@ export function Inspector({
           )}
 
           <div className="inspector-io-group">
-            <div className="inspector-io-group-title">Output</div>
+            <div className="inspector-io-group-title">{t("inspector.output")}</div>
             <div className="inspector-io-item">
               {inferenceResult?.activations[node.id] ? (
                 onViewOutput && (
                   <button type="button" className="inspector-io-link" onClick={onViewOutput}>
-                    View matrix →
+                    {t("inspector.viewMatrix")}
                   </button>
                 )
               ) : (
-                <span className="inspector-tensor-empty">Not captured for this run.</span>
+                <span className="inspector-tensor-empty">{t("inspector.notCaptured")}</span>
               )}
             </div>
           </div>
 
           <div className="io-row">
-            <span className="io-label">activation shape</span>
+            <span className="io-label">{t("inspector.activationShape")}</span>
             <span className="io-shape">{formatDims(activationShape!)}</span>
           </div>
           <div className="io-row">
-            <span className="io-label">magnitude (L2 norm)</span>
+            <span className="io-label">{t("inspector.magnitudeL2")}</span>
             <span className="io-shape">{activationMagnitude!.toFixed(4)}</span>
           </div>
         </Section>
       )}
 
       {inputSources.length > 0 && (
-        <Section title="Input construction">
+        <Section title={t("inspector.inputConstruction")}>
           {inputOperator ? (
-            <code className="formula">input = {inputSources.map((s) => s.label).join(` ${inputOperator} `)}</code>
+            <code className="formula">
+              {t("inspector.shapesInput")} = {inputSources.map((s) => s.label).join(` ${inputOperator} `)}
+            </code>
           ) : inputSources.length === 1 ? (
-            <code className="formula">input = {inputSources[0].label}</code>
+            <code className="formula">
+              {t("inspector.shapesInput")} = {inputSources[0].label}
+            </code>
           ) : (
             <>
-              <p>Assembled from multiple sources:</p>
+              <p>{t("inspector.assembledFromMultiple")}</p>
               <ul className="input-source-list">
                 {inputSources.map((s, i) => (
                   <li key={i}>{s.label}</li>
@@ -169,34 +175,34 @@ export function Inspector({
         <div className="inspector-actions">
           {hasThisRun && onViewActivation && (
             <button type="button" onClick={onViewActivation}>
-              View activation
+              {t("inspector.viewActivation")}
             </button>
           )}
           {node.parameters.length > 0 && onViewWeights && (
             <button type="button" onClick={onViewWeights}>
-              View weights
+              {t("inspector.viewWeights")}
             </button>
           )}
         </div>
       )}
 
       {info.formula && (
-        <Section title="Show me the math">
+        <Section title={t("inspector.showMeTheMath")}>
           <code className="formula">{info.formula}</code>
         </Section>
       )}
 
       {(node.inputs.length > 0 || node.outputs.length > 0) && (
-        <Section title="Shapes">
+        <Section title={t("inspector.shapes")}>
           {node.inputs.map((s, i) => (
             <div key={`in-${i}`} className="io-row">
-              <span className="io-label">input</span>
+              <span className="io-label">{t("inspector.shapesInput")}</span>
               <span className="io-shape">{formatDims(s.dims)}</span>
             </div>
           ))}
           {node.outputs.map((s, i) => (
             <div key={`out-${i}`} className="io-row">
-              <span className="io-label">output</span>
+              <span className="io-label">{t("inspector.shapesOutput")}</span>
               <span className="io-shape">{formatDims(s.dims)}</span>
             </div>
           ))}
@@ -204,10 +210,10 @@ export function Inspector({
       )}
 
       {node.parameters.length > 0 && (
-        <Section title={`Parameters (${totalParams.toLocaleString()})`}>
+        <Section title={t("inspector.parametersCount").replace("{n}", totalParams.toLocaleString())}>
           {node.parameters.map((p, i) => (
             <div key={i} className="io-row">
-              <span className="io-label">{p.slice ? `${p.name} (slice)` : p.name}</span>
+              <span className="io-label">{p.slice ? t("inspector.paramSlice").replace("{name}", p.name) : p.name}</span>
               <span className="io-shape">
                 {p.logicalShape.join(" × ")} · {p.dtype}
               </span>
@@ -217,7 +223,7 @@ export function Inspector({
       )}
 
       {Object.keys(node.metadata).length > 0 && (
-        <Section title="Metadata">
+        <Section title={t("inspector.metadata")}>
           {Object.entries(node.metadata).map(([k, v]) => (
             <div key={k} className="io-row">
               <span className="io-label">{k}</span>
@@ -270,6 +276,7 @@ function captureBytes(result: ActivationCapture): number {
  * this exact content.
  */
 function ModelSummarySections({ model, inferenceResult, tokenizer, elapsedMs }: { model: Model; inferenceResult?: ActivationCapture; tokenizer?: Tokenizer; elapsedMs?: number }) {
+  const { t } = useTranslation();
   const totalParams = totalParameterCount(model);
 
   const seen = new Set<string>();
@@ -285,23 +292,23 @@ function ModelSummarySections({ model, inferenceResult, tokenizer, elapsedMs }: 
 
   return (
     <>
-      <Section title="Model">
+      <Section title={t("inspector.model")}>
         <div className="io-row">
-          <span className="io-label">architecture</span>
+          <span className="io-label">{t("inspector.architecture")}</span>
           <span className="io-shape">{model.architecture}</span>
         </div>
         <div className="io-row">
-          <span className="io-label">parameters</span>
+          <span className="io-label">{t("inspector.parameters")}</span>
           <span className="io-shape">{formatCount(totalParams)}</span>
         </div>
         <div className="io-row">
-          <span className="io-label">layers</span>
+          <span className="io-label">{t("inspector.layers")}</span>
           <span className="io-shape">{model.config.numLayers}</span>
         </div>
       </Section>
 
       {groups.length > 0 && (
-        <Section title="Structure">
+        <Section title={t("inspector.structure")}>
           {groups.map((g) => (
             <div key={g.id} className="overview-structure-row">
               <span className="overview-structure-label" title={g.name}>
@@ -316,32 +323,32 @@ function ModelSummarySections({ model, inferenceResult, tokenizer, elapsedMs }: 
         </Section>
       )}
 
-      <Section title="Last run">
+      <Section title={t("inspector.lastRun")}>
         {inferenceResult && tokenizer ? (
           <>
             <div className="io-row">
-              <span className="io-label">prompt tokens</span>
+              <span className="io-label">{t("inspector.promptTokens")}</span>
               <span className="io-shape">{inferenceResult.tokenIds.length}</span>
             </div>
             <div className="io-row">
-              <span className="io-label">decoded</span>
+              <span className="io-label">{t("inspector.decoded")}</span>
               <span className="io-shape overview-prompt-preview" title={inferenceResult.tokens.join("")}>
                 {inferenceResult.tokens.join("")}
               </span>
             </div>
             {elapsedMs !== undefined && (
               <div className="io-row">
-                <span className="io-label">forward pass</span>
-                <span className="io-shape">{elapsedMs < 1 ? "<1 ms" : `${elapsedMs.toFixed(1)} ms`}</span>
+                <span className="io-label">{t("inspector.forwardPass")}</span>
+                <span className="io-shape">{elapsedMs < 1 ? t("inspector.lessThan1Ms") : t("inspector.msValue").replace("{ms}", elapsedMs.toFixed(1))}</span>
               </div>
             )}
             <div className="io-row">
-              <span className="io-label">memory (this run)</span>
+              <span className="io-label">{t("inspector.memoryThisRun")}</span>
               <span className="io-shape">{formatBytes(captureBytes(inferenceResult))}</span>
             </div>
             {topPrediction && (
               <div className="io-row">
-                <span className="io-label">top prediction</span>
+                <span className="io-label">{t("inspector.topPrediction")}</span>
                 <span className="io-shape">
                   {tokenizer.decodeToken(topPrediction.tokenId).trim() || `#${topPrediction.tokenId}`} · {formatPercent(topPrediction.prob)}
                 </span>
@@ -349,7 +356,7 @@ function ModelSummarySections({ model, inferenceResult, tokenizer, elapsedMs }: 
             )}
           </>
         ) : (
-          <p>Run a forward pass to see prediction and activation info here.</p>
+          <p>{t("inspector.runForwardHint")}</p>
         )}
       </Section>
     </>
@@ -358,11 +365,12 @@ function ModelSummarySections({ model, inferenceResult, tokenizer, elapsedMs }: 
 
 /** The overview shown in place of "click a component" when nothing is selected — a model summary plus (once a prompt has been run) a snapshot of the last result, so the Inspector isn't dead space before the user picks a node. */
 function ModelOverview({ model, inferenceResult, tokenizer, elapsedMs }: { model: Model; inferenceResult?: ActivationCapture; tokenizer?: Tokenizer; elapsedMs?: number }) {
+  const { t } = useTranslation();
   return (
     <div className="inspector inspector-overview">
-      <div className="inspector-overview-title">Model overview</div>
+      <div className="inspector-overview-title">{t("inspector.modelOverview")}</div>
       <ModelSummarySections model={model} inferenceResult={inferenceResult} tokenizer={tokenizer} elapsedMs={elapsedMs} />
-      <p className="overview-hint">Click a component in the graph or tree to inspect it.</p>
+      <p className="overview-hint">{t("inspector.clickToInspectHint")}</p>
     </div>
   );
 }
@@ -380,12 +388,13 @@ function Section({
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="inspector-section">
       <div className="inspector-section-header">
         <div className="inspector-section-title">{title}</div>
         {collapsible && (
-          <button type="button" className="inspector-section-collapse-btn" onClick={onToggleCollapsed} title={collapsed ? "Expand" : "Collapse"}>
+          <button type="button" className="inspector-section-collapse-btn" onClick={onToggleCollapsed} title={collapsed ? t("inspector.expand") : t("inspector.collapse")}>
             {collapsed ? "▸" : "▾"}
           </button>
         )}
