@@ -16,7 +16,7 @@ import { ModelInfoBar } from "./components/ModelInfoBar.js";
 import { ModelTree } from "./components/ModelTree.js";
 import { ArchitectureGraph, type GraphView } from "./components/ArchitectureGraph.js";
 import { Inspector } from "./components/Inspector.js";
-import { TensorExplorer } from "./components/TensorExplorer.js";
+import { TensorExplorer, type TensorSourceRequest } from "./components/TensorExplorer.js";
 import { InferencePanel } from "./components/InferencePanel.js";
 import { PredictionPanel } from "./components/PredictionPanel.js";
 import { LogitLensPanel } from "./components/LogitLensPanel.js";
@@ -88,7 +88,7 @@ export function App() {
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("tensor");
   const [analysisBusy, setAnalysisBusy] = useState(false);
-  const [tensorSourceRequest, setTensorSourceRequest] = useState<{ value: "weights" | "activations"; nonce: number } | null>(null);
+  const [tensorSourceRequest, setTensorSourceRequest] = useState<TensorSourceRequest | null>(null);
   /** Which prompt's tokens Token Attribution attributes — controlled here (rather than as the panel's own local state) so the Prediction panel's "Why?" link can request the matching side instead of always landing back on Prompt A. */
   const [attributionSource, setAttributionSource] = useState<"A" | "B">("A");
   const [treeCollapsed, setTreeCollapsed] = useLocalStorageState("panel:tree-collapsed", false);
@@ -277,6 +277,14 @@ export function App() {
   const requestTensorSource = (value: "weights" | "activations") => {
     selectBottomTab("tensor");
     setTensorSourceRequest({ value, nonce: Date.now() });
+  };
+
+  // Inspector's "This run" input/output links — jumps to Tensor Explorer's
+  // Input/Output tab, pre-selected to whichever side (and, for an input,
+  // which upstream source) the user actually clicked.
+  const requestTensorIO = (io: "input" | "output", sourceId?: string) => {
+    selectBottomTab("tensor");
+    setTensorSourceRequest({ value: "io", io, sourceId, nonce: Date.now() });
   };
 
   const viewWhy = (source: "A" | "B") => {
@@ -588,6 +596,8 @@ export function App() {
                 activationMagnitude={selectedId ? activationMagnitudeById?.[selectedId] : undefined}
                 onViewActivation={() => requestTensorSource("activations")}
                 onViewWeights={() => requestTensorSource("weights")}
+                onViewInput={(sourceId) => requestTensorIO("input", sourceId)}
+                onViewOutput={() => requestTensorIO("output")}
                 inferenceResult={inference.state.result}
                 tokenizer={state.tokenizer}
                 elapsedMs={inference.state.elapsedMs}

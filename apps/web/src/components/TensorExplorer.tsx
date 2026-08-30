@@ -7,6 +7,18 @@ import { Histogram } from "./Histogram.js";
 import { AttentionView } from "./AttentionView.js";
 import { composeSlice, defaultWindow, parameterKey } from "../tensor.js";
 import type { InferenceState } from "../useInference.js";
+import { describeInputConstruction } from "../nodeInputs.js";
+
+/**
+ * A one-shot request to switch tabs from outside — e.g. Inspector's "View
+ * activation"/"View weights" quick actions, or its "This run" input/output
+ * links. Bump `nonce` on every request so a repeat click of the same target
+ * (after the user has since switched tabs themselves) still re-applies it.
+ */
+export type TensorSourceRequest =
+  | { value: "weights"; nonce: number }
+  | { value: "activations"; nonce: number }
+  | { value: "io"; io: "input" | "output"; sourceId?: string; nonce: number };
 
 interface Props {
   model: Model;
@@ -15,8 +27,7 @@ interface Props {
   inference?: InferenceState;
   selectedTokenIndex: number | null;
   promptBInference?: InferenceState;
-  /** A one-shot request to switch the Weights/Activations source tab — e.g. from the Inspector's "View activation"/"View weights" quick actions. Bump `nonce` on every request so a repeat click of the same source still re-applies (a user may have since clicked to a different tab themselves). */
-  sourceRequest?: { value: "weights" | "activations"; nonce: number } | null;
+  sourceRequest?: TensorSourceRequest | null;
   /** True when weightProvider is a SyntheticWeightProvider — every value shown below (weights, and any activation, since those come from a forward pass over the same fabricated weights) is randomly generated, not real. */
   structureOnly?: boolean;
 }
@@ -36,7 +47,7 @@ function entryKey(p: ParamEntry): string {
 }
 
 type ViewMode = "heatmap" | "matrix" | "histogram" | "tokens";
-type Source = "weights" | "activations" | "compare";
+type Source = "weights" | "activations" | "io" | "compare";
 
 const MAX_MATRIX_CELLS = 128 * 128; // beyond this, the Matrix tab is disabled rather than freezing the tab
 
@@ -70,18 +81,36 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
   // not yet ready again) so this doesn't silently keep pointing at a stale
   // or now-absent result.
   const [activationSource, setActivationSource] = useState<"A" | "B">("A");
+  // Input/Output tab's own sub-state: which side (defaults to Output — the
+  // node's own result, the more central artifact), and for Input, which
+  // upstream source when a node has more than one (e.g. a Residual Add).
+  const [ioSubTab, setIoSubTab] = useState<"input" | "output">("output");
+  const [ioSourceId, setIoSourceId] = useState<string | null>(null);
 
   // a freshly-finished run is almost always what the user wants to look at next
   useEffect(() => {
     if (inference?.status === "ready") setSource("activations");
   }, [inference?.result]);
 
-  // Explicit request from outside (Inspector's quick actions) — keyed on
-  // `nonce` rather than `value` so clicking the same source again (after the
-  // user has since switched tabs themselves) still re-applies it.
+  // Explicit request from outside (Inspector's quick actions / This-run
+  // input-output links) — keyed on `nonce` rather than `value` so clicking
+  // the same target again (after the user has since switched tabs
+  // themselves) still re-applies it.
   useEffect(() => {
-    if (sourceRequest) setSource(sourceRequest.value);
+    if (!sourceRequest) return;
+    setSource(sourceRequest.value);
+    if (sourceRequest.value === "io") {
+      setIoSubTab(sourceRequest.io);
+      setIoSourceId(sourceRequest.sourceId ?? null);
+    }
   }, [sourceRequest?.nonce]);
+
+  // A different node's inputs are a different set of sources entirely — an
+  // ioSourceId left over from the previous node would silently point at an
+  // unrelated (or nonexistent) tensor otherwise.
+  useEffect(() => {
+    setIoSourceId(null);
+  }, [selectedNode?.id]);
 
   useEffect(() => {
     if (selectedNode && selectedNode.parameters.length > 0) {
@@ -133,6 +162,22 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
   const activationStats = useMemo(() => (activationTensor ? computeStats(activationTensor.data) : null), [activationTensor]);
   const attentionTensor = source === "activations" && selectedNode ? activeInference?.result?.attentionWeights[selectedNode.id] ?? null : null;
 
+  // Same upstream-edge resolution Inspector's "Input construction" and
+  // "This run" sections use, so the Input/Output tab's source picker always
+  // agrees with what Inspector says feeds this node — including the "This
+  // run" deep-link, which passes exactly one of these `sourceId`s through.
+  const inputSources = useMemo(() => (selectedNode ? describeInputConstruction(model, selectedNode).sources : []), [model, selectedNode]);
+  const activeIoSourceId = ioSourceId ?? inputSources[0]?.sourceId ?? null;
+  const ioTensor =
+    source === "io" && selectedNode
+      ? ioSubTab === "output"
+        ? activeInference?.result?.activations[selectedNode.id] ?? null
+        : activeIoSourceId
+          ? activeInference?.result?.activations[activeIoSourceId] ?? null
+          : null
+      : null;
+  const ioStats = useMemo(() => (ioTensor ? computeStats(ioTensor.data) : null), [ioTensor]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return allParams.filter((p) => p.ref.name.toLowerCase().includes(q) || p.ownerName.toLowerCase().includes(q));
@@ -142,14 +187,19 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
   const loadedElements = tensor ? numElements(tensor.shape) : 0;
   const loadedBytes = ref ? loadedElements * (ref.bytes / ref.numElements) : 0;
 
-  const displayTensor = source === "weights" ? tensor : activationTensor;
-  const displayStats = source === "weights" ? stats : activationStats;
+  const displayTensor = source === "weights" ? tensor : source === "io" ? ioTensor : activationTensor;
+  const displayStats = source === "weights" ? stats : source === "io" ? ioStats : activationStats;
   const canShowMatrix = !!displayTensor && displayTensor.data.length <= MAX_MATRIX_CELLS;
-  // Only meaningful for an activation whose rows are literally "one per
-  // token" — a weight tensor's rows aren't tokens, and a 1D tensor (e.g. a
-  // LayerNorm bias) has no per-token axis at all.
+  // Only meaningful for a tensor whose rows are literally "one per token" —
+  // a weight tensor's rows aren't tokens, and a 1D tensor (e.g. a LayerNorm
+  // bias) has no per-token axis at all. Applies to both Activations (always
+  // this node's own output) and Input/Output (either side, same shape rule).
   const canShowTokens =
-    source === "activations" && !!displayTensor && displayTensor.shape.length === 2 && !!activeInference?.displayTokens && displayTensor.shape[0] === activeInference.displayTokens.length;
+    (source === "activations" || source === "io") &&
+    !!displayTensor &&
+    displayTensor.shape.length === 2 &&
+    !!activeInference?.displayTokens &&
+    displayTensor.shape[0] === activeInference.displayTokens.length;
 
   // keep the active tab valid as the selection changes (e.g. a 1-value bias has no useful histogram)
   useEffect(() => {
@@ -184,6 +234,9 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
           </button>
           <button className={source === "activations" ? "active" : ""} onClick={() => setSource("activations")}>
             Activations (last run)
+          </button>
+          <button className={source === "io" ? "active" : ""} onClick={() => setSource("io")}>
+            Input/Output
           </button>
           <button className={source === "compare" ? "active" : ""} disabled={!hasPromptB} onClick={() => setSource("compare")} title={!hasPromptB ? "Run Prompt B first" : undefined}>
             Compare (A vs B)
@@ -240,7 +293,30 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
             is the opposite: one prompt's own activation at a time, at full
             detail (Matrix/Histogram, full stats), same as picking any other
             single tensor. */}
-        {source === "activations" && hasPromptB && (
+        {source === "io" && (
+          <div className="source-tabs io-subtab-tabs">
+            <button className={ioSubTab === "input" ? "active" : ""} disabled={!selectedNode || inputSources.length === 0} onClick={() => setIoSubTab("input")}>
+              Input
+            </button>
+            <button className={ioSubTab === "output" ? "active" : ""} onClick={() => setIoSubTab("output")}>
+              Output
+            </button>
+          </div>
+        )}
+        {/* Which upstream source, only when there's more than one to pick
+            between (e.g. a Residual Add reads two) — a single input needs
+            no picker, it's just shown. */}
+        {source === "io" && ioSubTab === "input" && inputSources.length > 1 && (
+          <div className="io-source-picker">
+            {inputSources.map((s) => (
+              <button key={s.sourceId} className={activeIoSourceId === s.sourceId ? "active" : ""} onClick={() => setIoSourceId(s.sourceId)} title={s.label}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {(source === "activations" || source === "io") && hasPromptB && (
           <div className="source-tabs activation-source-tabs">
             <button className={activationSource === "A" ? "active" : ""} onClick={() => setActivationSource("A")}>
               Prompt A
@@ -255,6 +331,13 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
         {source === "activations" && !selectedNode && <div className="empty-hint">Select a component to inspect its activation from the last forward pass.</div>}
         {source === "activations" && selectedNode && !activationTensor && (
           <div className="empty-hint">No activation was captured for "{selectedNode.name}" — try a leaf computation node (LayerNorm, a projection, the activation function, …).</div>
+        )}
+        {source === "io" && !selectedNode && <div className="empty-hint">Select a component to inspect its input/output tensors from the last forward pass.</div>}
+        {source === "io" && selectedNode && ioSubTab === "input" && inputSources.length === 0 && (
+          <div className="empty-hint">"{selectedNode.name}" has no upstream inputs in the graph.</div>
+        )}
+        {source === "io" && selectedNode && !ioTensor && (ioSubTab === "output" || inputSources.length > 0) && (
+          <div className="empty-hint">No activation was captured for this tensor — try a leaf computation node (LayerNorm, a projection, the activation function, …).</div>
         )}
 
         {source === "weights" && ref && (
@@ -290,6 +373,24 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
             <div className="tensor-meta">
               <span>Shape {activationTensor.shape.join(" × ")}</span>
               <span>dtype {activationTensor.dtype}</span>
+              <span>from prompt: "{activeInference?.displayTokens?.join("")}"</span>
+              {structureOnly && (
+                <span className="synthetic-badge" title="Computed from randomly generated weights (this checkpoint's real weights were never downloaded) — not a real forward pass.">
+                  Synthetic
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {source === "io" && selectedNode && ioTensor && (
+          <div className="tensor-header">
+            <div className="tensor-title">
+              {selectedNode.name} — {ioSubTab === "output" ? "output" : `input (${inputSources.find((s) => s.sourceId === activeIoSourceId)?.label ?? "?"})`}
+              {hasPromptB && <span className="tensor-title-prompt-tag">{activationSource === "A" ? "Prompt A" : "Prompt B"}</span>}
+            </div>
+            <div className="tensor-meta">
+              <span>Shape {ioTensor.shape.join(" × ")}</span>
+              <span>dtype {ioTensor.dtype}</span>
               <span>from prompt: "{activeInference?.displayTokens?.join("")}"</span>
               {structureOnly && (
                 <span className="synthetic-badge" title="Computed from randomly generated weights (this checkpoint's real weights were never downloaded) — not a real forward pass.">

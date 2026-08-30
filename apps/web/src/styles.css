@@ -1271,19 +1271,23 @@ input, select { font-family: inherit; }
 }
 .input-source-list { margin: 4px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
 
-/* --- Inspector "This run" Input/Output tensor previews --- */
+/* --- Inspector "This run" Input/Output rows --- */
 .inspector-io-group { margin-bottom: 10px; }
 .inspector-io-group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 4px; }
 .inspector-io-item + .inspector-io-item { margin-top: 8px; }
 .inspector-io-item-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inspector-tensor-thumb { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-/* Overrides .heatmap-canvas's own (much larger) max-width/max-height — this
-   is a glance-sized preview inside a narrow sidebar, not the primary
-   full-size view Tensor Explorer already provides for the same tensor. */
-.inspector-tensor-thumb .heatmap-canvas { max-width: 100%; max-height: 90px; }
-.inspector-tensor-thumb .heatmap-downsample-note { display: none; }
-.inspector-tensor-thumb-shape { font-size: 10px; font-family: ui-monospace, monospace; color: var(--text-tertiary); }
 .inspector-tensor-empty { margin: 0; font-size: 11px; color: var(--text-tertiary); font-style: italic; }
+/* Deep-links to Tensor Explorer's Input/Output tab — same plain-link
+   language as .inspector-back-link / .prediction-why-link elsewhere. */
+.inspector-io-link {
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+}
+.inspector-io-link:hover { text-decoration: underline; }
 .io-row {
   display: flex;
   justify-content: space-between;
@@ -1370,6 +1374,23 @@ input, select { font-family: inherit; }
    tucked close underneath rather than getting the same bottom margin,
    which read as a second unrelated tab strip instead of a sub-choice. */
 .activation-source-tabs { margin-top: -6px; }
+.io-subtab-tabs { margin-top: -6px; }
+/* Which upstream source to show, for a node with more than one input (e.g.
+   a Residual Add) — its own small pill-button row rather than reusing
+   .source-tabs, since labels here can run long ("Block input (from
+   outside this block)") and there can be more than two. */
+.io-source-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 12px; }
+.io-source-picker button {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.io-source-picker button:hover:not(.active) { color: var(--text-primary); }
+.io-source-picker button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 .tensor-header { margin-bottom: 8px; }
 .tensor-title { font-family: ui-monospace, monospace; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }

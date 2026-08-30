@@ -1,82 +1,15 @@
 import type { ReactNode } from "react";
-import type { ActivationCapture, Model, ModelNode, Tensor } from "@tensorium/model-ir";
+import type { ActivationCapture, Model, ModelNode } from "@tensorium/model-ir";
 import { totalParameterCount } from "@tensorium/model-ir";
 import type { Tokenizer } from "@tensorium/tokenizer";
 import { componentRegistry } from "../registry.js";
 import { topKFromLogits } from "../logits.js";
 import { formatBytes, formatCount, formatPercent } from "../format.js";
-import { Heatmap } from "./Heatmap.js";
 import { useLocalStorageState } from "../useLocalStorageState.js";
+import { describeInputConstruction } from "../nodeInputs.js";
 
 function formatDims(dims: Array<number | string>): string {
   return `[${dims.join(", ")}]`;
-}
-
-/** True if `ancestorId` is a strict ancestor of `node` (walking `parentId`, not including `node` itself). */
-function isAncestor(model: Model, ancestorId: string, node: ModelNode): boolean {
-  let cur = node.parentId;
-  while (cur) {
-    if (cur === ancestorId) return true;
-    cur = model.nodes[cur]?.parentId ?? null;
-  }
-  return false;
-}
-
-interface InputSource {
-  label: string;
-  isBlockBoundary: boolean;
-  /** The real edge source id — even for a "block input" boundary source, where it's the block container's own id. That container's captured activation *is* the tensor that actually flowed in at this boundary, so it's still a valid lookup key into ActivationCapture.activations, just not a very descriptive node name (hence the separate `label`). */
-  sourceId: string;
-}
-
-/**
- * Which upstream node(s) actually feed this one, and — where it's safe to
- * say so — how they combine. Two things make this trickier than just
- * reading `model.edges`:
- *
- * - A container's own id is sometimes used as an edge source purely so the
- *   *collapsed* graph view stays connected once its children are hidden
- *   (e.g. GPT-2's `edge(ffnContainer, fc)` alongside the real `edge(ln2,
- *   fc)` — the same pattern `buildLevel2Graph` already has to work around).
- *   Those are dropped whenever a real sibling/leaf edge already covers the
- *   connection. When a container edge is the *only* incoming edge, though
- *   (e.g. `edge(block, firstNorm)`), it's genuine — that's the block's own
- *   boundary — and is kept, labeled as such rather than by the container's
- *   own name (matching the graph's "Block Input" convention).
- * - Once real edges are settled, the combining operator is only asserted
- *   when it's actually knowable in general: "addition" category or a
- *   "skip"-labeled edge means +, "elementwise" means ×. A "linear" node
- *   with several incoming edges (e.g. Output Projection reading Q/K/V) is
- *   doing real attention math, not a simple combine — its own formula
- *   (shown separately) already covers that, so no operator is guessed here.
- */
-function describeInputConstruction(model: Model, node: ModelNode): { sources: InputSource[]; operator: "+" | "×" | null } {
-  const incoming = model.edges.filter((e) => e.target === node.id);
-  const nonAncestor = incoming.filter((e) => e.label === "skip" || !isAncestor(model, e.source, node));
-  // Container-sourced edges only survive if nothing more specific covers
-  // the connection — otherwise they're the redundant "collapsed view" kind.
-  const kept = nonAncestor.length > 0 ? nonAncestor : incoming;
-
-  const sources: InputSource[] = kept.map((e) => {
-    // Ancestor-sourced edges get relabeled regardless of "skip" — a
-    // residual's skip edge is very often exactly this pattern (the block's
-    // own original input, carried around the sub-layer), and deserves the
-    // same "Block Input" wording the graph itself uses rather than the
-    // container's literal name.
-    const boundary = isAncestor(model, e.source, node);
-    return { label: boundary ? "Block input (from outside this block)" : model.nodes[e.source]?.name ?? e.source, isBlockBoundary: boundary, sourceId: e.source };
-  });
-
-  if (sources.length < 2) return { sources, operator: null };
-
-  const info = componentRegistry[node.type];
-  if (info.category === "elementwise") return { sources, operator: "×" };
-  if (info.category === "addition" || kept.some((e) => e.label === "skip")) return { sources, operator: "+" };
-  if (info.category === "linear" || info.category === "other") return { sources, operator: null };
-  // A structural node (e.g. a transformer block) combining two or more
-  // untagged, non-container sources — every current instance of this
-  // (token + positional embedding feeding the first block) is a plain sum.
-  return { sources, operator: "+" };
 }
 
 interface Props {
@@ -87,6 +20,9 @@ interface Props {
   activationMagnitude?: number;
   onViewActivation?: () => void;
   onViewWeights?: () => void;
+  /** Deep-links into Tensor Explorer's Input/Output tab, pre-selected to this specific input source (by id) or to the node's own output — the "This run" section's replacement for showing a heatmap inline. */
+  onViewInput?: (sourceId: string) => void;
+  onViewOutput?: () => void;
   /** The last completed forward pass (Prompt A), if any — feeds the "Last run" section of the no-selection overview below (and the root node's own view, which folds the same overview in — see `isRoot`). Not threaded any further than that: once a non-root node is selected, its own activation info comes from `activationShape`/`activationMagnitude` instead. */
   inferenceResult?: ActivationCapture;
   tokenizer?: Tokenizer;
@@ -96,7 +32,20 @@ interface Props {
   onDeselect?: () => void;
 }
 
-export function Inspector({ model, node, activationShape, activationMagnitude, onViewActivation, onViewWeights, inferenceResult, tokenizer, elapsedMs, onDeselect }: Props) {
+export function Inspector({
+  model,
+  node,
+  activationShape,
+  activationMagnitude,
+  onViewActivation,
+  onViewWeights,
+  onViewInput,
+  onViewOutput,
+  inferenceResult,
+  tokenizer,
+  elapsedMs,
+  onDeselect,
+}: Props) {
   // Declared unconditionally, above the early return below, so the hook
   // count stays stable across a selection toggling node between a real
   // value and null (React's rules of hooks) — a per-user preference like
@@ -153,7 +102,19 @@ export function Inspector({ model, node, activationShape, activationMagnitude, o
                   <div className="inspector-io-item-label" title={s.label}>
                     {s.label}
                   </div>
-                  <TensorThumb tensor={inferenceResult?.activations[s.sourceId]} />
+                  {/* Detail (heatmap/matrix/histogram/stats) lives one click
+                      away in Tensor Explorer's Input/Output tab rather than
+                      inline here — this row is just "does this run actually
+                      have a captured value" plus a way in. */}
+                  {inferenceResult?.activations[s.sourceId] ? (
+                    onViewInput && (
+                      <button type="button" className="inspector-io-link" onClick={() => onViewInput(s.sourceId)}>
+                        View matrix →
+                      </button>
+                    )
+                  ) : (
+                    <span className="inspector-tensor-empty">Not captured for this run.</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -162,7 +123,15 @@ export function Inspector({ model, node, activationShape, activationMagnitude, o
           <div className="inspector-io-group">
             <div className="inspector-io-group-title">Output</div>
             <div className="inspector-io-item">
-              <TensorThumb tensor={inferenceResult?.activations[node.id]} />
+              {inferenceResult?.activations[node.id] ? (
+                onViewOutput && (
+                  <button type="button" className="inspector-io-link" onClick={onViewOutput}>
+                    View matrix →
+                  </button>
+                )
+              ) : (
+                <span className="inspector-tensor-empty">Not captured for this run.</span>
+              )}
             </div>
           </div>
 
@@ -394,29 +363,6 @@ function ModelOverview({ model, inferenceResult, tokenizer, elapsedMs }: { model
       <div className="inspector-overview-title">Model overview</div>
       <ModelSummarySections model={model} inferenceResult={inferenceResult} tokenizer={tokenizer} elapsedMs={elapsedMs} />
       <p className="overview-hint">Click a component in the graph or tree to inspect it.</p>
-    </div>
-  );
-}
-
-/**
- * A small heatmap of one node's real captured tensor, plus its shape — the
- * compact "what did this actually compute" view for Input/Output rows.
- * `undefined` (no activation recorded for this node — e.g. a purely
- * organizational container) and >2D (e.g. something 3D-shaped, which
- * shouldn't occur for a plain `activations` entry, but this guards it
- * anyway) both fall back to a text hint instead of attempting a heatmap.
- */
-function TensorThumb({ tensor }: { tensor?: Tensor }) {
-  if (!tensor) return <p className="inspector-tensor-empty">Not captured for this run.</p>;
-  if (tensor.shape.length > 2) return <p className="inspector-tensor-empty">Too many dimensions to preview here — see Tensor Explorer.</p>;
-  return (
-    <div className="inspector-tensor-thumb">
-      {tensor.shape.length === 2 ? (
-        <Heatmap data={tensor.data} rows={tensor.shape[0]} cols={tensor.shape[1]} cellSize={3} />
-      ) : (
-        <Heatmap data={tensor.data} rows={1} cols={tensor.shape[0]} cellSize={4} />
-      )}
-      <span className="inspector-tensor-thumb-shape">{formatDims(tensor.shape)}</span>
     </div>
   );
 }
