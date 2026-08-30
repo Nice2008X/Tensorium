@@ -213,6 +213,7 @@ export function App() {
           onCancel={() => confirmUnknownModel(false)}
           onConfirm={() => confirmUnknownModel(true)}
         />
+        <div className="app-loader-disclaimer">{t("loader.disclaimer")}</div>
       </div>
     );
   }
