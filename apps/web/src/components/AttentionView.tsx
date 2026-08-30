@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Tensor } from "@tensorium/model-ir";
+import { useTranslation } from "./LanguageContext.js";
 
 interface Props {
   attentionWeights: Tensor; // [numHeads, seqLen, seqLen]
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function AttentionView({ attentionWeights, tokens, queryTokenIndex }: Props) {
+  const { t } = useTranslation();
   const [head, setHead] = useState(0);
   const [numHeads, seqLen] = attentionWeights.shape;
   const h = Math.min(head, numHeads - 1);
@@ -19,17 +21,24 @@ export function AttentionView({ attentionWeights, tokens, queryTokenIndex }: Pro
   }
   const max = Math.max(...weights, 1e-9);
 
+  // "{token}" splits the translated sentence around the <strong>-wrapped
+  // token so the emphasis survives translation regardless of where the
+  // token falls in that language's word order.
+  const [headingBefore, headingAfter] = t("attention.heading").replace("{q}", String(q)).split("{token}");
+
   return (
     <div className="attention-view">
       <div className="attention-header">
         <span>
-          Attention from token <strong>{tokens[q] || `#${q}`}</strong> (position {q}) to each earlier token
+          {headingBefore}
+          <strong>{tokens[q] || `#${q}`}</strong>
+          {headingAfter}
         </span>
         {numHeads > 1 && (
           <div className="head-tabs">
             {Array.from({ length: numHeads }, (_, i) => (
               <button key={i} className={i === h ? "active" : ""} onClick={() => setHead(i)}>
-                head {i}
+                {t("attention.head").replace("{i}", String(i))}
               </button>
             ))}
           </div>
@@ -44,7 +53,7 @@ export function AttentionView({ attentionWeights, tokens, queryTokenIndex }: Pro
             <div className="attention-bar-track">
               <div className="attention-bar-fill" style={{ width: `${(w / max) * 100}%` }} />
             </div>
-            <span className="attention-bar-value">{w.toFixed(3)}</span>
+            <span className="attention-bar-value">{w.toFixed(4)}</span>
           </div>
         ))}
       </div>

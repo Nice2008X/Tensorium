@@ -74,8 +74,12 @@ exploring architecture and mechanics, not model quality.
   positional embedding).
 - **Tensor Explorer** — browse every weight tensor and every activation
   captured from the last forward pass, rendered as a heatmap, a raw
-  matrix, or a value histogram. Supports windowing into large tensors and
-  side-by-side A/B/diff comparison across two prompts.
+  matrix, or a value histogram. An **Input/Output tab** shows exactly what
+  flowed into and out of the selected node for that run — including which
+  of several upstream sources for a multi-input node (e.g. a residual add)
+  — deep-linked directly from the Inspector's "This run" section. Supports
+  windowing into large tensors and side-by-side A/B/diff comparison across
+  two prompts.
 - **Logit Lens** — project every layer's hidden state through the final
   norm and LM head to watch the model's next-token prediction sharpen (or
   change its mind) layer by layer.
@@ -89,10 +93,17 @@ exploring architecture and mechanics, not model quality.
 - **Themes and language** — dark, light, pastel, and sepia themes, plus a
   UI translated into nine languages, both configurable from the settings
   panel (top-right gear icon).
-- **Resizable, collapsible layout** — drag the bottom panel's top edge to
-  resize it (within sane min/max bounds); it and the tree/inspector/
-  prediction panels each collapse independently, and every size/collapse
-  preference persists across reloads.
+- **Resizable, collapsible layout** — drag the bottom panel's top edge, or
+  the model tree's and Inspector's own side edges, to resize them (within
+  sane min/max bounds); every panel collapses independently, and every
+  size/collapse preference persists across reloads.
+- **Status footer** — an always-visible strip showing the current
+  run/idle/error state, the selected node's breadcrumb, its real output
+  shape and dtype (or the static declared shape before any run), zoom
+  level, and a reminder that every computation here runs on the CPU, not a
+  GPU. While a forward pass is in flight, it shows real per-layer progress
+  (not a simulated animation) — useful on a large structure-only model,
+  where each layer's weight load is a genuine, sometimes-slow read.
 
 ## Screenshots
 
@@ -116,7 +127,7 @@ Qwen3.5's Gated DeltaNet block — a short causal convolution feeding a per-toke
 <td width="50%">
 
 **The full architecture, at a glance**
-The top-level graph — real 100% zoom by default, with a live zoom-percentage readout — before diving into any one block's internals.
+The top-level graph — real 100% zoom by default, with the current zoom level always readable in the status footer — before diving into any one block's internals.
 ![Qwen3-MoE's top-level architecture graph: token embedding into two transformer blocks into the LM head](docs/screenshot-architecture-overview.png)
 
 </td>
@@ -129,6 +140,9 @@ Every layer's hidden state projected through the final norm and LM head, watchin
 </td>
 </tr>
 </table>
+
+**See exactly what fed a node, one click away** — the Inspector's "This run" section deep-links straight into Tensor Explorer's Input/Output tab, landing on the right upstream source (here, the previous block's own output, correctly resolved rather than showing the block container's own — different — result) with real captured data, not a placeholder.
+![Tensor Explorer's Input/Output tab showing LayerNorm 1's real input tensor, deep-linked from the Inspector, with the status footer visible at the bottom](docs/screenshot-input-output.png)
 
 **Causal interventions** — zero out a component or patch in an activation from a second prompt, and see the effect on the output distribution.
 ![The Experiment panel with RMSNorm (pre-attention) selected, offering a Zero out (ablate) / Patch-in operation and a token-position scope](docs/screenshot-experiment.png)

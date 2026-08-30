@@ -1,23 +1,46 @@
 import type { Model } from "@tensorium/model-ir";
 import { totalParameterCount, totalParameterBytes } from "@tensorium/model-ir";
 import { formatBytes, formatCount } from "../format.js";
+import { useTranslation } from "./LanguageContext.js";
 
+/**
+ * Three loosely-themed clusters instead of one flat run of 10 same-weight
+ * stats — "what model" / "what shape" / "what it costs to run" reads faster
+ * at a glance than a row where params and dtype carry equal visual weight.
+ * Nothing here is dropped, just grouped; each group renders as one
+ * `·`-joined line rather than its own boxes.
+ */
 export function ModelInfoBar({ model, structureOnly, bestEffort }: { model: Model; structureOnly?: boolean; bestEffort?: boolean }) {
+  const { t } = useTranslation();
   const params = totalParameterCount(model);
   const bytes = totalParameterBytes(model);
   const dtype = Object.values(model.nodes).find((n) => n.parameters.length > 0)?.parameters[0]?.dtype ?? "—";
+  const weightsLabel = structureOnly ? t("modelInfo.weightsReal") : t("modelInfo.weightsBrowser");
 
-  const stats: [string, string][] = [
-    ["Architecture", model.architecture],
-    ["Parameters", formatCount(params)],
-    ["Layers", String(model.config.numLayers)],
-    ["Attention heads", String(model.config.numHeads)],
-    ["Hidden size", String(model.config.hiddenSize)],
-    ["Intermediate size", String(model.config.intermediateSize)],
-    ["Vocabulary", model.config.vocabSize.toLocaleString()],
-    ["Context length", model.config.contextLength.toLocaleString()],
-    ["Dtype", dtype],
-    [structureOnly ? "Weights (real, not downloaded)" : "Weights (in browser)", formatBytes(bytes)],
+  const groups: [string, string][] = [
+    [
+      t("modelInfo.groupModel"),
+      t("modelInfo.modelLine")
+        .replace("{arch}", model.architecture)
+        .replace("{params}", formatCount(params))
+        .replace("{layers}", String(model.config.numLayers)),
+    ],
+    [
+      t("modelInfo.groupArchitecture"),
+      t("modelInfo.architectureLine")
+        .replace("{heads}", String(model.config.numHeads))
+        .replace("{hidden}", String(model.config.hiddenSize))
+        .replace("{mlp}", String(model.config.intermediateSize))
+        .replace("{vocab}", model.config.vocabSize.toLocaleString()),
+    ],
+    [
+      t("modelInfo.groupRuntime"),
+      t("modelInfo.runtimeLine")
+        .replace("{dtype}", dtype)
+        .replace("{bytes}", formatBytes(bytes))
+        .replace("{weightsLabel}", weightsLabel)
+        .replace("{context}", model.config.contextLength.toLocaleString()),
+    ],
   ];
 
   return (
@@ -25,27 +48,25 @@ export function ModelInfoBar({ model, structureOnly, bestEffort }: { model: Mode
       <div className="model-info-name">
         {model.name}
         {structureOnly && (
-          <span
-            className="model-info-structure-badge"
-            title="This checkpoint is too large (or sharded) to download in a browser tab — the architecture and every tensor's shape/dtype above are exact, but no real weight bytes were ever fetched. A forward pass runs against randomly generated values instead, if enabled in Settings."
-          >
-            Structure only
+          <span className="model-info-structure-badge" title={t("modelInfo.structureOnlyTooltip")}>
+            {t("modelInfo.structureOnlyBadge")}
           </span>
         )}
         {bestEffort && (
-          <span
-            className="model-info-structure-badge"
-            title="No named adapter recognized this checkpoint's model type — its structure (layer count, projection shapes, MoE routing, ...) was auto-detected from its weight names instead of hand-verified. The graph should be accurate, but Run Forward Pass may compute incorrect numbers for any architecture detail this app couldn't detect automatically."
-          >
-            Best effort
+          <span className="model-info-structure-badge" title={t("modelInfo.bestEffortTooltip")}>
+            {t("modelInfo.bestEffortBadge")}
           </span>
         )}
       </div>
-      <div className="model-info-stats">
-        {stats.map(([label, value]) => (
-          <div key={label} className="model-info-stat">
-            <div className="model-info-stat-value">{value}</div>
-            <div className="model-info-stat-label">{label}</div>
+      {/* Only the last (Runtime) group is allowed to shrink+ellipsize — see
+          .model-info-group:last-child — so a narrow window (or a long model
+          name eating into the available width) degrades to "F32 · 32.8 MB…"
+          instead of the row running underneath .top-right-controls. */}
+      <div className="model-info-groups">
+        {groups.map(([label, value]) => (
+          <div key={label} className="model-info-group">
+            <div className="model-info-group-label">{label}</div>
+            <div className="model-info-group-value">{value}</div>
           </div>
         ))}
       </div>

@@ -16,7 +16,7 @@ import { ModelInfoBar } from "./components/ModelInfoBar.js";
 import { ModelTree } from "./components/ModelTree.js";
 import { ArchitectureGraph, type GraphView } from "./components/ArchitectureGraph.js";
 import { Inspector } from "./components/Inspector.js";
-import { TensorExplorer } from "./components/TensorExplorer.js";
+import { TensorExplorer, type TensorSourceRequest } from "./components/TensorExplorer.js";
 import { InferencePanel } from "./components/InferencePanel.js";
 import { PredictionPanel } from "./components/PredictionPanel.js";
 import { LogitLensPanel } from "./components/LogitLensPanel.js";
@@ -29,6 +29,19 @@ const BOTTOM_PANEL_DEFAULT_HEIGHT = 360;
 const BOTTOM_PANEL_MIN_HEIGHT = 160;
 /** Leaves at least this much vertical space for the tree/graph/inspector row above, however tall the window is. */
 const BOTTOM_PANEL_TOP_RESERVE = 240;
+
+const TREE_PANEL_DEFAULT_WIDTH = 260;
+// Below this, tree rows (indented 14px per depth) and long node names start
+// truncating illegibly rather than just looking cramped.
+const TREE_PANEL_MIN_WIDTH = 160;
+const INSPECTOR_PANEL_DEFAULT_WIDTH = 320;
+// Below this, the Inspector's io-rows (a label and a monospace value on one
+// line — see .io-row) start wrapping instead of staying legible.
+const INSPECTOR_PANEL_MIN_WIDTH = 220;
+/** Leaves at least this much horizontal space for the graph pane, however wide the tree/inspector panels are dragged. */
+const GRAPH_PANEL_MIN_WIDTH = 320;
+/** The two 6px resize handles plus each pane's own 1px border (×3 panes) — real chrome the max-width math below would otherwise ignore, letting the graph pane end up a bit under GRAPH_PANEL_MIN_WIDTH rather than at least that wide. */
+const PANE_CHROME_ALLOWANCE = 24;
 
 /** Real (on-disk) weight-byte ceiling past which a structure-only model's synthetic forward pass is refused outright, not just opt-in-gated — see `oversizedForForwardPass` below. */
 const MAX_FORWARD_PASS_WEIGHT_BYTES = 20 * 1024 ** 3;
@@ -75,7 +88,7 @@ export function App() {
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("tensor");
   const [analysisBusy, setAnalysisBusy] = useState(false);
-  const [tensorSourceRequest, setTensorSourceRequest] = useState<{ value: "weights" | "activations"; nonce: number } | null>(null);
+  const [tensorSourceRequest, setTensorSourceRequest] = useState<TensorSourceRequest | null>(null);
   /** Which prompt's tokens Token Attribution attributes — controlled here (rather than as the panel's own local state) so the Prediction panel's "Why?" link can request the matching side instead of always landing back on Prompt A. */
   const [attributionSource, setAttributionSource] = useState<"A" | "B">("A");
   const [treeCollapsed, setTreeCollapsed] = useLocalStorageState("panel:tree-collapsed", false);
@@ -83,6 +96,14 @@ export function App() {
   const [bottomCollapsed, setBottomCollapsed] = useLocalStorageState("panel:bottom-collapsed", false);
   const [bottomHeight, setBottomHeight] = useLocalStorageState("panel:bottom-height", BOTTOM_PANEL_DEFAULT_HEIGHT);
   const [resizingBottom, setResizingBottom] = useState(false);
+  const [treeWidth, setTreeWidth] = useLocalStorageState("panel:tree-width", TREE_PANEL_DEFAULT_WIDTH);
+  const [inspectorWidth, setInspectorWidth] = useLocalStorageState("panel:inspector-width", INSPECTOR_PANEL_DEFAULT_WIDTH);
+  const [resizingTree, setResizingTree] = useState(false);
+  const [resizingInspector, setResizingInspector] = useState(false);
+  // Mirrors ArchitectureGraph's own on-canvas zoom badge — kept here too so
+  // the status footer can show it without either component owning the
+  // other's state.
+  const [zoomPercent, setZoomPercent] = useState(100);
   const [predictionCollapsed, setPredictionCollapsed] = useLocalStorageState("panel:prediction-collapsed", false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   // Off by default: a structure-only model's real weights were deliberately
@@ -192,6 +213,7 @@ export function App() {
           onCancel={() => confirmUnknownModel(false)}
           onConfirm={() => confirmUnknownModel(true)}
         />
+        <div className="app-loader-disclaimer">{t("loader.disclaimer")}</div>
       </div>
     );
   }
@@ -258,6 +280,14 @@ export function App() {
     setTensorSourceRequest({ value, nonce: Date.now() });
   };
 
+  // Inspector's "This run" input/output links — jumps to Tensor Explorer's
+  // Input/Output tab, pre-selected to whichever side (and, for an input,
+  // which upstream source) the user actually clicked.
+  const requestTensorIO = (io: "input" | "output", sourceId?: string) => {
+    selectBottomTab("tensor");
+    setTensorSourceRequest({ value: "io", io, sourceId, nonce: Date.now() });
+  };
+
   const viewWhy = (source: "A" | "B") => {
     setAttributionSource(source);
     selectBottomTab("attribution");
@@ -285,6 +315,50 @@ export function App() {
   const hasResultB = compareEnabled && promptB.state.status === "ready" && !!promptB.state.result;
   const analysisTabsEnabled = hasResult && !!state.adapter?.runInference;
   const currentRepo = state.source?.kind === "huggingface" ? state.source.repo : undefined;
+
+  // Status-footer fields — all read from state this component already
+  // holds, nothing computed just for display here.
+  const runningA = inference.state.status === "running";
+  const runningB = promptB.state.status === "running";
+  const footerBusy = analysisBusy || runningA || runningB;
+  // Real per-layer progress from whichever run is actually in flight (see
+  // InferenceProgress) — prefers A when both happen to be running at once,
+  // which is rare enough not to need a combined display.
+  const footerProgress = runningA ? inference.state.progress : runningB ? promptB.state.progress : undefined;
+  const footerRunningLabel = runningA && runningB ? t("footer.runningBoth") : runningB ? t("footer.runningB") : t("inference.running");
+  const footerStatus: { label: string; tone: "ready" | "busy" | "error" } =
+    inference.state.status === "error" || promptB.state.status === "error"
+      ? { label: t("footer.error"), tone: "error" }
+      : footerBusy
+        ? { label: analysisBusy ? t("footer.analyzing") : footerRunningLabel, tone: "busy" }
+        : { label: t("footer.ready"), tone: "ready" };
+  // The selected node's own block if it's inside one, else whichever block
+  // the graph is currently showing the detail view of, else no block
+  // context at all (top-level architecture view, nothing selected).
+  const footerBlockId = selectedId ? containingBlockId(model, selectedId) : safeView.kind === "block" ? safeView.blockId : null;
+  const footerBlockLabel = footerBlockId ? model.nodes[footerBlockId]?.name : t("footer.architectureView");
+  // Selecting a node should change *what's shown*, not just the numbers
+  // next to it — "Transformer Block 0" alone doesn't say whether you're
+  // looking at its Attention or its FFN. Folds the block context and the
+  // node's own name into one breadcrumb-style title (just the block name
+  // when nothing's selected, or when the selection *is* the block itself).
+  const footerTitle = selectedNode && footerBlockId !== selectedNode.id ? `${footerBlockLabel} › ${selectedNode.name}` : selectedNode?.name ?? footerBlockLabel;
+  const footerTensor = selectedId ? inference.state.result?.activations[selectedId] : undefined;
+  // Shape falls back to the node's statically-declared output spec (real —
+  // every adapter fills this in at graph-build time, not a run artifact —
+  // just symbolic, e.g. "sequence_length" instead of the run's actual
+  // token count) rather than a bare dash whenever there's no captured
+  // activation yet. Dtype has no such static equivalent for most node
+  // types — model-ir's TensorSpec carries dims only, not a dtype — so it
+  // only falls back for a node that owns weights, where the weight's own
+  // dtype is a real (if imperfect) stand-in; otherwise it stays "—".
+  const footerShape = footerTensor
+    ? `[${footerTensor.shape.join(" × ")}]`
+    : selectedNode?.outputs[0]
+      ? `[${selectedNode.outputs[0].dims.join(", ")}]`
+      : "—";
+  const footerDtype = footerTensor?.dtype ?? selectedNode?.parameters[0]?.dtype ?? "—";
+  const footerNorm = selectedId ? activationMagnitudeById?.[selectedId] : undefined;
 
   // Derived, not a separate stored flag: "max frame" just means every
   // surrounding panel is currently collapsed. The prediction panel only
@@ -323,8 +397,61 @@ export function App() {
     window.addEventListener("mouseup", onUp);
   };
 
+  // Drag-to-resize for the tree and inspector panels — same pattern as the
+  // bottom panel above, mirrored horizontally. The max clamp for each also
+  // accounts for the *other* side panel's current width (full or collapsed
+  // to its 36px strip), so dragging one out doesn't silently starve the
+  // graph pane below GRAPH_PANEL_MIN_WIDTH just because the other panel
+  // also happens to be wide.
+  const handleTreeResizeStart = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = treeWidth;
+    setResizingTree(true);
+    const onMove = (moveEvent: MouseEvent) => {
+      const inspectorSpace = inspectorCollapsed ? 36 : inspectorWidth;
+      const maxWidth = Math.max(TREE_PANEL_MIN_WIDTH, window.innerWidth - inspectorSpace - GRAPH_PANEL_MIN_WIDTH - PANE_CHROME_ALLOWANCE);
+      const next = startWidth + (moveEvent.clientX - startX);
+      setTreeWidth(Math.min(maxWidth, Math.max(TREE_PANEL_MIN_WIDTH, Math.round(next))));
+    };
+    const onUp = () => {
+      setResizingTree(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const handleInspectorResizeStart = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = inspectorWidth;
+    setResizingInspector(true);
+    const onMove = (moveEvent: MouseEvent) => {
+      const treeSpace = treeCollapsed ? 36 : treeWidth;
+      const maxWidth = Math.max(INSPECTOR_PANEL_MIN_WIDTH, window.innerWidth - treeSpace - GRAPH_PANEL_MIN_WIDTH - PANE_CHROME_ALLOWANCE);
+      const next = startWidth + (startX - moveEvent.clientX);
+      setInspectorWidth(Math.min(maxWidth, Math.max(INSPECTOR_PANEL_MIN_WIDTH, Math.round(next))));
+    };
+    const onUp = () => {
+      setResizingInspector(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   return (
-    <div className={"app" + (analysisBusy ? " app-busy" : "") + (resizingBottom ? " app-resizing-panel" : "")}>
+    <div
+      className={
+        "app" +
+        (analysisBusy ? " app-busy" : "") +
+        (resizingBottom ? " app-resizing-panel" : "") +
+        (resizingTree || resizingInspector ? " app-resizing-col-panel" : "")
+      }
+    >
       <ModelInfoBar model={model} structureOnly={structureOnly} bestEffort={state.adapter?.id === "generic"} />
       <div className="top-right-controls">
         <div className="control-group">
@@ -404,8 +531,11 @@ export function App() {
           )}
         </div>
       )}
-      <div className="app-body">
-        <aside className={"pane pane-tree" + (treeCollapsed ? " collapsed" : "")}>
+      <div className="app-main-row">
+        <aside
+          className={"pane pane-tree" + (treeCollapsed ? " collapsed" : "") + (resizingTree ? " resizing" : "")}
+          style={treeCollapsed ? undefined : { width: treeWidth }}
+        >
           <div className="pane-header">
             {!treeCollapsed && <span className="pane-header-title">{t("app.modelTree")}</span>}
             <button className="pane-collapse-btn" onClick={() => setTreeCollapsed((v) => !v)} title={treeCollapsed ? t("app.expandTree") : t("app.collapseTree")}>
@@ -426,6 +556,13 @@ export function App() {
             </div>
           )}
         </aside>
+        {!treeCollapsed && (
+          <div
+            className={"pane-resize-handle pane-resize-handle-vertical" + (resizingTree ? " resizing" : "")}
+            onMouseDown={handleTreeResizeStart}
+            title={t("app.resizePanel")}
+          />
+        )}
         <main className="pane pane-graph">
           <ArchitectureGraph
             model={model}
@@ -436,9 +573,20 @@ export function App() {
             onExitBlock={() => setView({ kind: "architecture" })}
             isMaxFrame={isMaxFrame}
             onToggleMaxFrame={toggleMaxFrame}
+            onZoomChange={setZoomPercent}
           />
         </main>
-        <aside className={"pane pane-inspector" + (inspectorCollapsed ? " collapsed" : "")}>
+        {!inspectorCollapsed && (
+          <div
+            className={"pane-resize-handle pane-resize-handle-vertical" + (resizingInspector ? " resizing" : "")}
+            onMouseDown={handleInspectorResizeStart}
+            title={t("app.resizePanel")}
+          />
+        )}
+        <aside
+          className={"pane pane-inspector" + (inspectorCollapsed ? " collapsed" : "") + (resizingInspector ? " resizing" : "")}
+          style={inspectorCollapsed ? undefined : { width: inspectorWidth }}
+        >
           <div className="pane-header">
             <button className="pane-collapse-btn" onClick={() => setInspectorCollapsed((v) => !v)} title={inspectorCollapsed ? t("app.expandInspector") : t("app.collapseInspector")}>
               {inspectorCollapsed ? "‹" : "›"}
@@ -456,6 +604,12 @@ export function App() {
                 activationMagnitude={selectedId ? activationMagnitudeById?.[selectedId] : undefined}
                 onViewActivation={() => requestTensorSource("activations")}
                 onViewWeights={() => requestTensorSource("weights")}
+                onViewInput={(sourceId) => requestTensorIO("input", sourceId)}
+                onViewOutput={() => requestTensorIO("output")}
+                inferenceResult={inference.state.result}
+                tokenizer={state.tokenizer}
+                elapsedMs={inference.state.elapsedMs}
+                onDeselect={() => setSelectedId(null)}
               />
             </div>
           )}
@@ -544,6 +698,44 @@ export function App() {
           />
         )}
       </section>
+      <div className="status-footer">
+        <span className={"status-footer-dot status-footer-dot-" + footerStatus.tone} />
+        <span className="status-footer-item status-footer-status">{footerStatus.label}</span>
+        {/* Real per-layer progress (see InferenceProgress) — only while a
+            forward pass is actually running and the adapter reports it, not
+            a simulated/timed fill. */}
+        {footerBusy && footerProgress && (
+          <span
+            className="status-footer-item status-footer-progress"
+            title={t("footer.layerProgress").replace("{completed}", String(footerProgress.completed)).replace("{total}", String(footerProgress.total))}
+          >
+            <span className="status-footer-progress-track">
+              <span className="status-footer-progress-fill" style={{ width: `${Math.round((footerProgress.completed / footerProgress.total) * 100)}%` }} />
+            </span>
+            <span className="status-footer-progress-label">
+              {footerProgress.completed}/{footerProgress.total}
+            </span>
+          </span>
+        )}
+        <span className="status-footer-sep" />
+        <span className="status-footer-item status-footer-title" title={footerTitle}>
+          {footerTitle}
+        </span>
+        <span className="status-footer-sep" />
+        <span className="status-footer-item">{footerShape}</span>
+        <span className="status-footer-item">{footerDtype}</span>
+        {/* No static equivalent for a norm — it's only ever a real run
+            artifact — so this simply doesn't render rather than showing an
+            empty "— norm" next to the two fields above that now do have a
+            static, always-real fallback. */}
+        {footerNorm !== undefined && <span className="status-footer-item">{t("footer.norm").replace("{value}", footerNorm.toFixed(4))}</span>}
+        <span className="status-footer-sep" />
+        <span className="status-footer-item">{t("footer.zoom").replace("{percent}", String(zoomPercent))}</span>
+        <span className="status-footer-spacer" />
+        <span className="status-footer-item status-footer-compute" title={t("footer.cpuTooltip")}>
+          {t("footer.cpu")}
+        </span>
+      </div>
     </div>
   );
 }

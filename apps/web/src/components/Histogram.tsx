@@ -9,7 +9,7 @@ export function Histogram({ stats }: { stats: TensorStats }) {
           key={i}
           className="histogram-bar"
           style={{ height: `${(b.count / max) * 100}%` }}
-          title={`[${b.binStart.toFixed(3)}, ${b.binEnd.toFixed(3)}) — ${b.count}`}
+          title={`[${b.binStart.toFixed(4)}, ${b.binEnd.toFixed(4)}) — ${b.count}`}
         />
       ))}
     </div>
