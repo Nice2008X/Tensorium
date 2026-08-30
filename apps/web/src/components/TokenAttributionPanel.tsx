@@ -107,7 +107,7 @@ export function TokenAttributionPanel({ model, weightProvider, adapter, tokenIds
     <div className="token-attribution">
       {sourceToggle}
       <div className="attribution-intro">
-        Occlusion attribution toward predicting <strong>"{targetDisplay}"</strong>{positionNote} (the model's actual top prediction, logit {result.baselineLogit.toFixed(3)}).
+        Occlusion attribution toward predicting <strong>"{targetDisplay}"</strong>{positionNote} (the model's actual top prediction, logit {result.baselineLogit.toFixed(4)}).
         Each bar shows how much removing that token or head <em>hurt</em> (blue, right) or <em>helped</em> (red, left) the prediction.
       </div>
       <div className="attribution-section-title">Most influential tokens</div>

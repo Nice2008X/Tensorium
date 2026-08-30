@@ -1636,6 +1636,10 @@ input, select { font-family: inherit; }
   50% { opacity: 0.35; }
 }
 .status-footer-status { font-weight: 600; color: var(--text-primary); font-family: inherit; }
+.status-footer-progress { display: flex; align-items: center; gap: 5px; }
+.status-footer-progress-track { width: 64px; height: 4px; border-radius: 2px; background: var(--border-default); overflow: hidden; flex-shrink: 0; }
+.status-footer-progress-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width 0.12s linear; }
+.status-footer-progress-label { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 .status-footer-title { font-family: inherit; color: var(--text-primary); font-weight: 600; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .status-footer-item { white-space: nowrap; }
 .status-footer-sep { width: 1px; height: 12px; background: var(--border-default); flex-shrink: 0; }

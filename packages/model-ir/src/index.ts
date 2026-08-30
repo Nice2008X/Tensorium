@@ -240,6 +240,12 @@ export interface LoadProgress {
   totalBytes?: number;
 }
 
+/** Reported by `runInference` as it works through a model's layers — real progress against the same per-layer loop that's actually doing the computation, not a simulated/timed animation. `total` is each adapter's own step count (typically `numLayers + 2`, for the embedding step and the final-norm/LM-head step bookending the per-layer loop) so it stays exact regardless of architecture. */
+export interface InferenceProgress {
+  completed: number;
+  total: number;
+}
+
 export interface ModelAdapter {
   id: string;
   displayName: string;
@@ -258,8 +264,13 @@ export interface ModelAdapter {
    * activation is computed, so everything downstream sees the edited value
    * — this is what makes ablation/patching an actual re-execution rather
    * than a cosmetic overlay on the original run's numbers.
+   *
+   * `onProgress`, when given, is called synchronously after each step of
+   * the forward pass actually finishes (see InferenceProgress) — useful for
+   * a progress indicator on a large structure-only model, where each
+   * layer's weight load is a real, sometimes-slow network/IndexedDB read.
    */
-  runInference?(model: Model, weightProvider: WeightProvider, tokenIds: number[], interventions?: Intervention[]): Promise<ActivationCapture>;
+  runInference?(model: Model, weightProvider: WeightProvider, tokenIds: number[], interventions?: Intervention[], onProgress?: (progress: InferenceProgress) => void): Promise<ActivationCapture>;
 }
 
 // ---------------------------------------------------------------------------

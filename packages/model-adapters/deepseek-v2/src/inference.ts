@@ -1,4 +1,4 @@
-import type { ActivationCapture, Intervention, Model, Tensor, WeightProvider } from "@tensorium/model-ir";
+import type { ActivationCapture, InferenceProgress, Intervention, Model, Tensor, WeightProvider } from "@tensorium/model-ir";
 import {
   addMatrices,
   applyActivation,
@@ -156,9 +156,18 @@ function headsToTensor(headWeights: number[][][]): Tensor {
   return { shape: [numHeads, S, S], dtype: "F32", data };
 }
 
-export async function runInference(model: Model, weightProvider: WeightProvider, tokenIds: number[], interventions?: Intervention[]): Promise<ActivationCapture> {
+export async function runInference(
+  model: Model,
+  weightProvider: WeightProvider,
+  tokenIds: number[],
+  interventions?: Intervention[],
+  onProgress?: (progress: InferenceProgress) => void
+): Promise<ActivationCapture> {
   const cfg = model.config;
   const S = tokenIds.length;
+  // One step for the embedding lookup, one per transformer block, one for
+  // the final norm + LM head — real steps of the loop below, not a guess.
+  const totalSteps = cfg.numLayers + 2;
   const numHeads = cfg.numHeads;
   const eps = Number(cfg.extra.rmsNormEps ?? 1e-6);
   const activationKind = String(cfg.extra.activationFunction ?? "silu");
@@ -273,6 +282,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
   const embedTokens = await loadMatrix("model.embed_tokens.weight");
   let x = embed(tokenIds, embedTokens);
   x = record("embed", x);
+  onProgress?.({ completed: 1, total: totalSteps });
 
   for (let i = 0; i < cfg.numLayers; i++) {
     const b = `block.${i}`;
@@ -422,6 +432,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
 
     const res2 = record(`${b}.res2`, addMatrices(ffnOut, res1));
     x = record(b, res2);
+    onProgress?.({ completed: 2 + i, total: totalSteps });
   }
 
   const normg = await loadVector("model.norm.weight");
@@ -430,6 +441,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
   const lmHeadRef = model.nodes["lm_head"].parameters[0];
   const lmHeadW = await loadMatrix(lmHeadRef.name);
   const logits = record("lm_head", linear(normOut, lmHeadW, null, "out_in"));
+  onProgress?.({ completed: totalSteps, total: totalSteps });
 
   return {
     tokenIds,

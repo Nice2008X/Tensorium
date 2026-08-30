@@ -1,4 +1,4 @@
-import type { ActivationCapture, Intervention, Model, WeightProvider } from "@tensorium/model-ir";
+import type { ActivationCapture, InferenceProgress, Intervention, Model, WeightProvider } from "@tensorium/model-ir";
 import {
   addMatrices,
   applyActivation,
@@ -14,12 +14,21 @@ import {
   type Matrix,
 } from "@tensorium/nn-ops";
 
-export async function runInference(model: Model, weightProvider: WeightProvider, tokenIds: number[], interventions?: Intervention[]): Promise<ActivationCapture> {
+export async function runInference(
+  model: Model,
+  weightProvider: WeightProvider,
+  tokenIds: number[],
+  interventions?: Intervention[],
+  onProgress?: (progress: InferenceProgress) => void
+): Promise<ActivationCapture> {
   const cfg = model.config;
   const numHeads = cfg.numHeads;
   const headDim = cfg.hiddenSize / numHeads;
   const eps = Number(cfg.extra.layerNormEpsilon ?? 1e-5);
   const activationKind = String(cfg.extra.activationFunction ?? "gelu_new");
+  // One step for the embedding lookup, one per transformer block, one for
+  // the final norm + LM head — real steps of the loop below, not a guess.
+  const totalSteps = cfg.numLayers + 2;
 
   const activations: ActivationCapture["activations"] = {};
   const attentionWeights: ActivationCapture["attentionWeights"] = {};
@@ -50,6 +59,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
   const tokenEmbed = record("wte", embed(tokenIds, wte));
   const posEmbed = record("wpe", tokenIds.map((_, pos) => wpe[pos]));
   let x = addMatrices(tokenEmbed, posEmbed);
+  onProgress?.({ completed: 1, total: totalSteps });
 
   for (let i = 0; i < cfg.numLayers; i++) {
     const b = `block.${i}`;
@@ -109,6 +119,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
     // users actually click at the architecture level, so it must be a real
     // intervention point that feeds block N+1, not a discarded display copy.
     x = record(b, res2);
+    onProgress?.({ completed: 2 + i, total: totalSteps });
   }
 
   const lnfg = await loadVector("transformer.ln_f.weight");
@@ -118,6 +129,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
   const lmHeadRef = model.nodes["lm_head"].parameters[0];
   const lmHeadW = await loadMatrix(lmHeadRef.name); // [vocab, hidden], nn.Linear layout (out_in)
   const logits = record("lm_head", linear(lnfOut, lmHeadW, null, "out_in"));
+  onProgress?.({ completed: totalSteps, total: totalSteps });
 
   return {
     tokenIds,

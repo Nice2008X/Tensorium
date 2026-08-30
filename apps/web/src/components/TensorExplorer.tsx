@@ -562,7 +562,7 @@ function RawGrid({ tensor }: { tensor: Tensor }) {
             <tr key={r}>
               {Array.from({ length: cols }, (_, c) => {
                 const v = tensor.data[r * cols + c];
-                return <td key={c}>{v.toFixed(3)}</td>;
+                return <td key={c}>{v.toFixed(4)}</td>;
               })}
             </tr>
           ))}

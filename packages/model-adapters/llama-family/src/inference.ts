@@ -1,4 +1,4 @@
-import type { ActivationCapture, Intervention, Model, Tensor, WeightProvider } from "@tensorium/model-ir";
+import type { ActivationCapture, InferenceProgress, Intervention, Model, Tensor, WeightProvider } from "@tensorium/model-ir";
 import {
   addMatrices,
   applyActivation,
@@ -24,9 +24,18 @@ import {
   type Matrix,
 } from "@tensorium/nn-ops";
 
-export async function runInference(model: Model, weightProvider: WeightProvider, tokenIds: number[], interventions?: Intervention[]): Promise<ActivationCapture> {
+export async function runInference(
+  model: Model,
+  weightProvider: WeightProvider,
+  tokenIds: number[],
+  interventions?: Intervention[],
+  onProgress?: (progress: InferenceProgress) => void
+): Promise<ActivationCapture> {
   const cfg = model.config;
   const S = tokenIds.length;
+  // One step for the embedding lookup, one per transformer block, one for
+  // the final norm + LM head — real steps of the loop below, not a guess.
+  const totalSteps = cfg.numLayers + 2;
   const numHeads = cfg.numHeads;
   const numKeyValueHeads = Number(cfg.extra.numKeyValueHeads ?? numHeads);
   const headDim = Number(cfg.extra.headDim ?? cfg.hiddenSize / numHeads);
@@ -164,6 +173,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
   let x = embed(tokenIds, embedTokens);
   if (cfg.extra.embeddingScale === "sqrt_hidden") x = scaleMatrix(x, Math.sqrt(cfg.hiddenSize));
   x = record("embed", x);
+  onProgress?.({ completed: 1, total: totalSteps });
 
   const { cos, sin } = ropeCosSin(S, rotaryDim, ropeTheta);
 
@@ -284,6 +294,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
     // users actually click at the architecture level, so it must be a real
     // intervention point that feeds block N+1, not a discarded display copy.
     x = record(b, res2);
+    onProgress?.({ completed: 2 + i, total: totalSteps });
   }
 
   const normg = await loadNormGamma("model.norm.weight");
@@ -292,6 +303,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
   const lmHeadRef = model.nodes["lm_head"].parameters[0];
   const lmHeadW = await loadMatrix(lmHeadRef.name); // [vocab, hidden], out_in
   const logits = record("lm_head", linear(normOut, lmHeadW, null, "out_in"));
+  onProgress?.({ completed: totalSteps, total: totalSteps });
 
   return {
     tokenIds,

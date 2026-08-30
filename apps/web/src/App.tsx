@@ -317,12 +317,19 @@ export function App() {
 
   // Status-footer fields — all read from state this component already
   // holds, nothing computed just for display here.
-  const footerBusy = analysisBusy || inference.state.status === "running";
+  const runningA = inference.state.status === "running";
+  const runningB = promptB.state.status === "running";
+  const footerBusy = analysisBusy || runningA || runningB;
+  // Real per-layer progress from whichever run is actually in flight (see
+  // InferenceProgress) — prefers A when both happen to be running at once,
+  // which is rare enough not to need a combined display.
+  const footerProgress = runningA ? inference.state.progress : runningB ? promptB.state.progress : undefined;
+  const footerRunningLabel = runningA && runningB ? "Running A & B…" : runningB ? "Running Prompt B…" : "Running…";
   const footerStatus: { label: string; tone: "ready" | "busy" | "error" } =
-    inference.state.status === "error"
+    inference.state.status === "error" || promptB.state.status === "error"
       ? { label: "Error", tone: "error" }
       : footerBusy
-        ? { label: analysisBusy ? "Analyzing…" : "Running…", tone: "busy" }
+        ? { label: analysisBusy ? "Analyzing…" : footerRunningLabel, tone: "busy" }
         : { label: "Ready", tone: "ready" };
   // The selected node's own block if it's inside one, else whichever block
   // the graph is currently showing the detail view of, else no block
@@ -693,6 +700,19 @@ export function App() {
       <div className="status-footer">
         <span className={"status-footer-dot status-footer-dot-" + footerStatus.tone} />
         <span className="status-footer-item status-footer-status">{footerStatus.label}</span>
+        {/* Real per-layer progress (see InferenceProgress) — only while a
+            forward pass is actually running and the adapter reports it, not
+            a simulated/timed fill. */}
+        {footerBusy && footerProgress && (
+          <span className="status-footer-item status-footer-progress" title={`Layer ${footerProgress.completed} of ${footerProgress.total}`}>
+            <span className="status-footer-progress-track">
+              <span className="status-footer-progress-fill" style={{ width: `${Math.round((footerProgress.completed / footerProgress.total) * 100)}%` }} />
+            </span>
+            <span className="status-footer-progress-label">
+              {footerProgress.completed}/{footerProgress.total}
+            </span>
+          </span>
+        )}
         <span className="status-footer-sep" />
         <span className="status-footer-item status-footer-title" title={footerTitle}>
           {footerTitle}

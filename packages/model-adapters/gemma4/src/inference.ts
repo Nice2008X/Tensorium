@@ -1,4 +1,4 @@
-import type { ActivationCapture, Intervention, Model, Tensor, WeightProvider } from "@tensorium/model-ir";
+import type { ActivationCapture, InferenceProgress, Intervention, Model, Tensor, WeightProvider } from "@tensorium/model-ir";
 import {
   addMatrices,
   applyActivation,
@@ -99,9 +99,18 @@ function headsToTensor(headWeights: number[][][]): Tensor {
 
 const LP = "model.language_model";
 
-export async function runInference(model: Model, weightProvider: WeightProvider, tokenIds: number[], interventions?: Intervention[]): Promise<ActivationCapture> {
+export async function runInference(
+  model: Model,
+  weightProvider: WeightProvider,
+  tokenIds: number[],
+  interventions?: Intervention[],
+  onProgress?: (progress: InferenceProgress) => void
+): Promise<ActivationCapture> {
   const cfg = model.config;
   const S = tokenIds.length;
+  // One step for the embedding lookup, one per transformer block, one for
+  // the final norm + LM head — real steps of the loop below, not a guess.
+  const totalSteps = cfg.numLayers + 2;
   const numHeads = cfg.numHeads;
   const numKVHeads = Number(cfg.extra.numKeyValueHeads);
   const eps = Number(cfg.extra.rmsNormEps ?? 1e-6);
@@ -148,6 +157,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
   let x = embed(tokenIds, embedTokensW);
   x = scaleMatrix(x, Math.sqrt(H));
   x = record("embed", x);
+  onProgress?.({ completed: 1, total: totalSteps });
 
   // Per-Layer Embeddings — computed once, sliced per layer below. See
   // graph.ts's "Per-Layer Input Projection" node for the same math with
@@ -287,6 +297,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
     const layerScalar = layerScalarVec[0] ?? 1;
     const scaled = record(`${b}.scale`, scaleMatrix(blockPreScale, layerScalar));
     x = record(b, scaled);
+    onProgress?.({ completed: 2 + i, total: totalSteps });
   }
 
   const normG = await loadVector(`${LP}.norm.weight`);
@@ -301,6 +312,7 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
     logits = logits.map((row) => row.map((v) => Math.tanh(v / finalLogitSoftcapping) * finalLogitSoftcapping));
     logits = record("logit_softcap", logits);
   }
+  onProgress?.({ completed: totalSteps, total: totalSteps });
 
   return {
     tokenIds,

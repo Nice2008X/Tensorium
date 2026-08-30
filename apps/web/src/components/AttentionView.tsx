@@ -44,7 +44,7 @@ export function AttentionView({ attentionWeights, tokens, queryTokenIndex }: Pro
             <div className="attention-bar-track">
               <div className="attention-bar-fill" style={{ width: `${(w / max) * 100}%` }} />
             </div>
-            <span className="attention-bar-value">{w.toFixed(3)}</span>
+            <span className="attention-bar-value">{w.toFixed(4)}</span>
           </div>
         ))}
       </div>
