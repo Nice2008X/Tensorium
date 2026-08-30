@@ -58,6 +58,15 @@ export async function runInference(model: Model, weightProvider: WeightProvider,
 
   const activations: ActivationCapture["activations"] = {};
   const attentionWeights: ActivationCapture["attentionWeights"] = {};
+  // Token IDs are real per-run data too (the tokenizer's output for this
+  // exact prompt) — capturing them under the root "input" node id lets the
+  // Embedding node's "input" view show real values instead of reporting
+  // nothing captured, since "input" otherwise never appears on the left
+  // side of a `record()` call below.
+  activations["input"] = matrixToTensor(
+    tokenIds.map((id) => [id]),
+    "I32"
+  );
 
   const loadMatrix = async (name: string): Promise<Matrix> => tensorToMatrix(await weightProvider.loadTensor(name));
   const loadVector = async (name: string): Promise<number[]> => tensorToVector(await weightProvider.loadTensor(name));

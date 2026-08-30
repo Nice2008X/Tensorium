@@ -4,7 +4,7 @@ import { componentRegistry } from "./registry.js";
 export interface InputSource {
   label: string;
   isBlockBoundary: boolean;
-  /** The real edge source id — even for a "block input" boundary source, where it's the block container's own id. That container's captured activation *is* the tensor that actually flowed in at this boundary, so it's still a valid lookup key into ActivationCapture.activations, just not a very descriptive node name (hence the separate `label`). */
+  /** A valid lookup key into ActivationCapture.activations for this source's real value. For a "block input" boundary source this is *not* the block container's own id (see resolveBoundarySources for why) — it's whichever node actually produced the value that crossed the boundary. */
   sourceId: string;
 }
 
@@ -16,6 +16,40 @@ function isAncestor(model: Model, ancestorId: string, node: ModelNode): boolean 
     cur = model.nodes[cur]?.parentId ?? null;
   }
   return false;
+}
+
+/**
+ * A block-boundary edge's `source` is the *container* (e.g. `block.3`), used
+ * so the collapsed graph view stays connected — but every node's captured
+ * activation is its own *output* (see every `record(id, ...)` call in each
+ * adapter's `inference.ts`), containers included. So `activations[container]`
+ * is that block's result, not what fed into it — using it directly as "this
+ * boundary's input value" would silently show the wrong tensor (e.g. block
+ * 3's own output, mislabeled as block 3's input). The real input value is
+ * whatever produced the container itself, so resolve one hop further: the
+ * container's own incoming edges. Those sources are genuine leaf/other-block
+ * outputs, correctly captured under their own ids — e.g. block 0's boundary
+ * resolves to Token Embedding + Positional Embedding (its two real inputs);
+ * block N>0's resolves to block N-1 (its predecessor's real output).
+ */
+function resolveBoundarySources(model: Model, containerId: string): InputSource[] {
+  const upstream = model.edges.filter((e) => e.target === containerId);
+  if (upstream.length === 0) {
+    // No recorded producer for this container (e.g. it's the graph root) —
+    // fall back to its own id, still a valid (if less descriptive) lookup
+    // key into ActivationCapture.activations.
+    return [{ label: "Block input (from outside this block)", isBlockBoundary: true, sourceId: containerId }];
+  }
+  return upstream.map((e) => {
+    const src = model.nodes[e.source];
+    const parent = src?.parentId ? model.nodes[src.parentId] : null;
+    // "Residual Add" / "LayerNorm 1" etc. are reused verbatim by every block
+    // — for a source living inside some *other* transformer block (e.g. the
+    // previous block's own output), name that block too so it doesn't read
+    // as if it belongs to the block being inspected.
+    const name = parent?.type === "transformer_block" ? `${parent.name} → ${src?.name ?? e.source}` : src?.name ?? e.source;
+    return { label: `Block input: ${name}`, isBlockBoundary: true, sourceId: e.source };
+  });
 }
 
 /**
@@ -50,14 +84,16 @@ export function describeInputConstruction(model: Model, node: ModelNode): { sour
   // the connection — otherwise they're the redundant "collapsed view" kind.
   const kept = nonAncestor.length > 0 ? nonAncestor : incoming;
 
-  const sources: InputSource[] = kept.map((e) => {
+  const sources: InputSource[] = kept.flatMap((e) => {
     // Ancestor-sourced edges get relabeled regardless of "skip" — a
     // residual's skip edge is very often exactly this pattern (the block's
     // own original input, carried around the sub-layer), and deserves the
     // same "Block Input" wording the graph itself uses rather than the
-    // container's literal name.
+    // container's literal name. Resolved one hop further (see
+    // resolveBoundarySources) since the container's *own* captured
+    // activation is its output, not this boundary's input value.
     const boundary = isAncestor(model, e.source, node);
-    return { label: boundary ? "Block input (from outside this block)" : model.nodes[e.source]?.name ?? e.source, isBlockBoundary: boundary, sourceId: e.source };
+    return boundary ? resolveBoundarySources(model, e.source) : [{ label: model.nodes[e.source]?.name ?? e.source, isBlockBoundary: false, sourceId: e.source }];
   });
 
   if (sources.length < 2) return { sources, operator: null };
