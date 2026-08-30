@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LoadProgress, Model, ModelAdapter, ModelMetadata, ModelSource, WeightProvider } from "@tensorium/model-ir";
 import { fetchArrayBuffer, hfResolveUrl, peekModelType, type HfConfigPreview } from "@tensorium/hf-client";
 import { loadTokenizer, type Tokenizer } from "@tensorium/tokenizer";
@@ -205,13 +205,23 @@ export function useModel() {
 
   // Restore the last Hugging-Face-sourced model once, on mount — this is
   // what makes refreshing the chart frame page stay there instead of
-  // dropping back to the home screen. loadFromSource is stable (useCallback
-  // with no deps), so this genuinely only needs to run once; StrictMode's
-  // dev-only double-invoke just re-requests the same repo a second time,
-  // which is a cache hit, not a real duplicate load.
+  // dropping back to the home screen. `restoreStartedRef` guards against
+  // React 18 StrictMode's dev-only double-invocation of mount effects:
+  // without it, this fired `loadFromSource` twice, and the two loads landed
+  // at different times, so `state.model`'s reference changed *twice* on one
+  // refresh. App.tsx's "skip the reset-selection effect once, for the
+  // restore" guard only accounts for a single settle, so the second change
+  // slipped past it and forced a real reset — right as the graph was
+  // mid-relayout, which is what made the chart frame render blank for a
+  // moment (confirmed live: `status-footer` already said "Ready" while the
+  // canvas had zero rendered nodes). The ref makes StrictMode's replay a
+  // genuine no-op instead of a second real load.
+  const restoreStartedRef = useRef(false);
   useEffect(() => {
+    if (restoreStartedRef.current) return;
     const repo = readPersistedRepo();
     if (!repo) return;
+    restoreStartedRef.current = true;
     loadFromSource({ kind: "huggingface", repo }).finally(() => setRestoring(false));
   }, [loadFromSource]);
 
