@@ -413,19 +413,17 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
         {source === "weights" && loading && <div className="empty-hint">{t("tensor.loadingTensor")}</div>}
 
         {!loading && displayTensor && displayStats && (
-          <div className="tensor-body">
+          <div
+            className={
+              "tensor-body" +
+              (source === "activations" || source === "io" ? " tensor-body-stats-first" : "") +
+              (view === "matrix" ? " tensor-body-matrix-full" : "")
+            }
+          >
             <div className="tensor-visual">
               <div className="view-tabs">
                 <button className={view === "heatmap" ? "active" : ""} onClick={() => setView("heatmap")}>
                   {t("tensor.heatmap")}
-                </button>
-                <button
-                  className={view === "matrix" ? "active" : ""}
-                  disabled={!canShowMatrix}
-                  onClick={() => setView("matrix")}
-                  title={!canShowMatrix ? t("tensor.matrixDisabledTooltip") : undefined}
-                >
-                  {t("tensor.matrix")}
                 </button>
                 <button className={view === "histogram" ? "active" : ""} onClick={() => setView("histogram")}>
                   {t("tensor.histogram")}
@@ -435,6 +433,14 @@ export function TensorExplorer({ model, weightProvider, selectedNode, inference,
                     {t("tensor.perToken")}
                   </button>
                 )}
+                <button
+                  className={view === "matrix" ? "active" : ""}
+                  disabled={!canShowMatrix}
+                  onClick={() => setView("matrix")}
+                  title={!canShowMatrix ? t("tensor.matrixDisabledTooltip") : undefined}
+                >
+                  {t("tensor.matrix")}
+                </button>
               </div>
 
               {view === "heatmap" && displayTensor.shape.length === 2 && <Heatmap data={displayTensor.data} rows={displayTensor.shape[0]} cols={displayTensor.shape[1]} />}

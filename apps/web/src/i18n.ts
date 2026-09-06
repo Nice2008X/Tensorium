@@ -70,6 +70,7 @@ const en = {
   "loader.viewOnGithub": "View source on GitHub",
   "loader.disclaimer": "Tensorium is an independent, open-source project, not affiliated with or endorsed by Meta, Google, Alibaba, Microsoft, Zhipu, DeepSeek, AI2, OpenAI, or Hugging Face. It does not moderate or review the output of any model you load.",
 
+  "inference.title": "Inference",
   "inference.promptA": "Prompt A",
   "inference.promptB": "Prompt B",
   "inference.placeholderA": "Type a prompt to run through the model…",
@@ -299,6 +300,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "在 GitHub 上查看源码",
     "loader.disclaimer": "Tensorium 是一个独立的开源项目，与 Meta、Google、阿里巴巴、Microsoft、智谱、DeepSeek、AI2、OpenAI 或 Hugging Face 均无关联，也未获得其认可或赞助。本工具不会审核或监管你所加载模型生成的内容。",
 
+    "inference.title": "推理",
     "inference.promptA": "提示词 A",
     "inference.promptB": "提示词 B",
     "inference.placeholderA": "输入要送入模型的提示词…",
@@ -523,6 +525,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "Ver el código fuente en GitHub",
     "loader.disclaimer": "Tensorium es un proyecto independiente de código abierto, no afiliado ni respaldado por Meta, Google, Alibaba, Microsoft, Zhipu, DeepSeek, AI2, OpenAI ni Hugging Face. No modera ni revisa la salida de ningún modelo que cargues.",
 
+    "inference.title": "Inferencia",
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
     "inference.placeholderA": "Escribe un prompt para pasar por el modelo…",
@@ -747,6 +750,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "Voir le code source sur GitHub",
     "loader.disclaimer": "Tensorium est un projet indépendant et open source, non affilié à Meta, Google, Alibaba, Microsoft, Zhipu, DeepSeek, AI2, OpenAI ou Hugging Face, et non approuvé par eux. Il ne modère ni ne vérifie la sortie d'aucun modèle que vous chargez.",
 
+    "inference.title": "Inférence",
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
     "inference.placeholderA": "Tapez un prompt à faire passer dans le modèle…",
@@ -971,6 +975,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "Quellcode auf GitHub ansehen",
     "loader.disclaimer": "Tensorium ist ein unabhängiges Open-Source-Projekt und weder mit Meta, Google, Alibaba, Microsoft, Zhipu, DeepSeek, AI2, OpenAI noch Hugging Face verbunden oder von ihnen unterstützt. Es moderiert oder prüft die Ausgabe keines geladenen Modells.",
 
+    "inference.title": "Inferenz",
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
     "inference.placeholderA": "Gib einen Prompt ein, der durch das Modell laufen soll…",
@@ -1195,6 +1200,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "GitHub でソースを見る",
     "loader.disclaimer": "Tensorium は独立したオープンソースプロジェクトであり、Meta、Google、Alibaba、Microsoft、Zhipu、DeepSeek、AI2、OpenAI、Hugging Face のいずれとも提携・承認関係はありません。読み込んだモデルの出力を監視・検閲することもありません。",
 
+    "inference.title": "推論",
     "inference.promptA": "プロンプト A",
     "inference.promptB": "プロンプト B",
     "inference.placeholderA": "モデルに通すプロンプトを入力…",
@@ -1419,6 +1425,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "GitHub에서 소스 보기",
     "loader.disclaimer": "Tensorium은 독립적인 오픈소스 프로젝트이며 Meta, Google, Alibaba, Microsoft, Zhipu, DeepSeek, AI2, OpenAI, Hugging Face 중 어디와도 제휴하거나 그들의 승인을 받지 않았습니다. 불러온 모델의 출력을 검토하거나 관리하지 않습니다.",
 
+    "inference.title": "추론",
     "inference.promptA": "프롬프트 A",
     "inference.promptB": "프롬프트 B",
     "inference.placeholderA": "모델에 입력할 프롬프트를 입력하세요…",
@@ -1643,6 +1650,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "Ver código-fonte no GitHub",
     "loader.disclaimer": "O Tensorium é um projeto independente e de código aberto, não afiliado a nem endossado por Meta, Google, Alibaba, Microsoft, Zhipu, DeepSeek, AI2, OpenAI ou Hugging Face. Ele não modera nem revisa a saída de nenhum modelo que você carregar.",
 
+    "inference.title": "Inferência",
     "inference.promptA": "Prompt A",
     "inference.promptB": "Prompt B",
     "inference.placeholderA": "Digite um prompt para passar pelo modelo…",
@@ -1867,6 +1875,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "loader.viewOnGithub": "Посмотреть исходный код на GitHub",
     "loader.disclaimer": "Tensorium — независимый проект с открытым исходным кодом, не связанный с Meta, Google, Alibaba, Microsoft, Zhipu, DeepSeek, AI2, OpenAI или Hugging Face и не одобренный ими. Он не модерирует и не проверяет результаты работы загружаемых вами моделей.",
 
+    "inference.title": "Инференс",
     "inference.promptA": "Промпт A",
     "inference.promptB": "Промпт B",
     "inference.placeholderA": "Введите промпт для прогона через модель…",
