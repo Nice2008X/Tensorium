@@ -739,6 +739,25 @@ input, select { font-family: inherit; }
   border-bottom: 1px solid var(--border-hairline);
 }
 .inference-panel-disabled { color: var(--text-tertiary); font-size: 12px; font-style: italic; }
+.inference-header { display: flex; align-items: center; gap: 10px; }
+.inference-collapse-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-tertiary);
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.inference-collapse-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+.inference-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.inference-panel .inference-form { margin-top: 8px; }
 .inference-form { display: flex; align-items: center; gap: 10px; }
 .inference-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
 .inference-form input {
@@ -1432,6 +1451,21 @@ input, select { font-family: inherit; }
 
 .tensor-body { display: flex; gap: 20px; margin-top: 10px; flex-wrap: wrap; }
 .tensor-visual { display: flex; flex-direction: column; gap: 10px; }
+/* Activations/Input-Output read top-to-bottom as "here's the summary, here's
+   the picture" — stats first, heatmap after — while Weights keeps the
+   heatmap-first order since that tab is about browsing the raw parameter. */
+.tensor-body-stats-first .tensor-stats { order: -1; }
+/* Matrix is a raw numbers grid, not a fixed-aspect visual — let it grow from
+   its normal position to fill the rest of the row (stats keep their own
+   width) instead of sharing a small max-width the way Heatmap/Histogram/Per
+   Token do. */
+.tensor-body-matrix-full .tensor-visual { flex: 1 1 0; min-width: 0; }
+.tensor-body-matrix-full .raw-grid-scroll { width: 100%; max-width: none; }
+/* The scroll wrapper growing to full width isn't enough on its own — a
+   table with no explicit width still sizes to its own cell content, leaving
+   the extra space empty on the right. table-layout: fixed makes the browser
+   actually distribute the full 100% width evenly across columns. */
+.tensor-body-matrix-full .raw-grid { width: 100%; table-layout: fixed; }
 
 .view-tabs { display: flex; gap: 4px; }
 .view-tabs button {

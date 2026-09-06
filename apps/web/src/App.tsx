@@ -105,6 +105,7 @@ export function App() {
   // other's state.
   const [zoomPercent, setZoomPercent] = useState(100);
   const [predictionCollapsed, setPredictionCollapsed] = useLocalStorageState("panel:prediction-collapsed", false);
+  const [inferenceCollapsed, setInferenceCollapsed] = useLocalStorageState("panel:inference-collapsed", false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   // Off by default: a structure-only model's real weights were deliberately
   // never downloaded (too large or sharded — see hf-client's
@@ -365,13 +366,14 @@ export function App() {
   // counts when it's actually rendered (a result exists) — otherwise its
   // stored collapse preference shouldn't stop the other three panels from
   // reading as "already maximized".
-  const isMaxFrame = treeCollapsed && inspectorCollapsed && bottomCollapsed && (!hasResult || predictionCollapsed);
+  const isMaxFrame = treeCollapsed && inspectorCollapsed && bottomCollapsed && inferenceCollapsed && (!hasResult || predictionCollapsed);
   const toggleMaxFrame = () => {
     const next = !isMaxFrame;
     setTreeCollapsed(next);
     setInspectorCollapsed(next);
     setBottomCollapsed(next);
     setPredictionCollapsed(next);
+    setInferenceCollapsed(next);
   };
 
   // Drag-to-resize for the bottom panel. Height is tracked in state (not
@@ -506,8 +508,10 @@ export function App() {
         estimatedForwardPassBytes={estimatedForwardPassBytes}
         noteDismissed={structureOnlyNoteDismissed}
         onDismissNote={() => setStructureOnlyNoteDismissed(true)}
+        collapsed={inferenceCollapsed}
+        onToggleCollapsed={() => setInferenceCollapsed((v) => !v)}
       />
-      {hasResult && state.tokenizer && (
+      {!inferenceCollapsed && hasResult && state.tokenizer && (
         <div className="prediction-panels-row">
           <PredictionPanel
             result={inference.state.result!}

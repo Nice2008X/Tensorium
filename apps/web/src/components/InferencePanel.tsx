@@ -26,6 +26,9 @@ interface Props {
   /** Hides the structure-only note for the current model only — reset by the caller whenever a different model loads. */
   noteDismissed: boolean;
   onDismissNote: () => void;
+  /** Lifted to App so the "maximize graph" control can collapse/expand this panel together with the tree/inspector/bottom/prediction panels, not just this panel's own toggle. */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 export function InferencePanel({
@@ -46,6 +49,8 @@ export function InferencePanel({
   estimatedForwardPassBytes,
   noteDismissed,
   onDismissNote,
+  collapsed,
+  onToggleCollapsed,
 }: Props) {
   const { t } = useTranslation();
   const [prompt, setPrompt] = useState("The cat sat on the");
@@ -61,92 +66,107 @@ export function InferencePanel({
 
   return (
     <div className="inference-panel">
-      <form
-        className="inference-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onRun(prompt);
-        }}
-      >
-        <span className="inference-label">{t("inference.promptA")}</span>
-        <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("inference.placeholderA")} />
-        <button type="submit" disabled={state.status === "running" || forwardPassBlocked}>
-          {state.status === "running" ? t("inference.running") : t("inference.run")}
-        </button>
+      <div className="inference-header">
         <button
           type="button"
-          className="compare-toggle"
-          onClick={onToggleCompare}
-          disabled={forwardPassBlocked}
-          title={forwardPassBlocked ? t("inference.structureOnlyBlocked").replace("{memory}", formatBytes(estimatedForwardPassBytes)) : undefined}
+          className="inference-collapse-btn"
+          onClick={onToggleCollapsed}
+          title={collapsed ? t("app.expandPanel") : t("app.collapsePanel")}
         >
-          {compareEnabled ? t("inference.hidePromptB") : t("inference.comparePromptB")}
+          {collapsed ? "▸" : "▾"}
         </button>
-      </form>
-
-      {structureOnly && !noteDismissed && (
-        <div className="inference-structure-only-note">
-          <span>{t("inference.structureOnlyBlocked").replace("{memory}", formatBytes(estimatedForwardPassBytes))}</span>
-          {!oversizedForForwardPass && (
-            <button type="button" onClick={forwardPassBlocked ? onEnableForwardPass : onDisableForwardPass}>
-              {forwardPassBlocked ? t("inference.enableSyntheticForwardPass") : t("inference.disableSyntheticForwardPass")}
+        <span className="inference-title">{t("inference.title")}</span>
+      </div>
+      {!collapsed && (
+        <>
+          <form
+            className="inference-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onRun(prompt);
+            }}
+          >
+            <span className="inference-label">{t("inference.promptA")}</span>
+            <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("inference.placeholderA")} />
+            <button type="submit" disabled={state.status === "running" || forwardPassBlocked}>
+              {state.status === "running" ? t("inference.running") : t("inference.run")}
             </button>
-          )}
-          <button type="button" className="inference-structure-only-note-close" onClick={onDismissNote} aria-label={t("inference.dismissNote")} title={t("inference.dismissNote")}>
-            ×
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              className="compare-toggle"
+              onClick={onToggleCompare}
+              disabled={forwardPassBlocked}
+              title={forwardPassBlocked ? t("inference.structureOnlyBlocked").replace("{memory}", formatBytes(estimatedForwardPassBytes)) : undefined}
+            >
+              {compareEnabled ? t("inference.hidePromptB") : t("inference.comparePromptB")}
+            </button>
+          </form>
 
-      {state.status === "error" && <div className="inference-error">{state.error}</div>}
-
-      {state.status === "ready" && state.displayTokens && (
-        <div className="token-chips">
-          {state.displayTokens.map((t, i) => {
-            const id = state.result?.tokenIds[i];
-            return (
-              <button
-                key={i}
-                className={"token-chip" + (i === selectedTokenIndex ? " selected" : "")}
-                onClick={() => onSelectToken(i)}
-                title={`position ${i}${id !== undefined ? ` · token id ${id}` : ""}`}
-              >
-                <span className="token-chip-text">{t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}</span>
-                {id !== undefined && <span className="token-chip-id">{id}</span>}
+          {structureOnly && !noteDismissed && (
+            <div className="inference-structure-only-note">
+              <span>{t("inference.structureOnlyBlocked").replace("{memory}", formatBytes(estimatedForwardPassBytes))}</span>
+              {!oversizedForForwardPass && (
+                <button type="button" onClick={forwardPassBlocked ? onEnableForwardPass : onDisableForwardPass}>
+                  {forwardPassBlocked ? t("inference.enableSyntheticForwardPass") : t("inference.disableSyntheticForwardPass")}
+                </button>
+              )}
+              <button type="button" className="inference-structure-only-note-close" onClick={onDismissNote} aria-label={t("inference.dismissNote")} title={t("inference.dismissNote")}>
+                ×
               </button>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          )}
 
-      {compareEnabled && (
-        <form
-          className="inference-form prompt-b-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onRunB(promptB);
-          }}
-        >
-          <span className="inference-label">{t("inference.promptB")}</span>
-          <input value={promptB} onChange={(e) => setPromptB(e.target.value)} placeholder={t("inference.placeholderB")} />
-          <button type="submit" disabled={promptBState.status === "running" || forwardPassBlocked}>
-            {promptBState.status === "running" ? t("inference.running") : t("inference.runB")}
-          </button>
-        </form>
-      )}
-      {compareEnabled && promptBState.status === "error" && <div className="inference-error">{promptBState.error}</div>}
-      {compareEnabled && promptBState.status === "ready" && promptBState.displayTokens && (
-        <div className="token-chips token-chips-b">
-          {promptBState.displayTokens.map((t, i) => {
-            const id = promptBState.result?.tokenIds[i];
-            return (
-              <span key={i} className="token-chip token-chip-readonly" title={id !== undefined ? `position ${i} · token id ${id}` : undefined}>
-                <span className="token-chip-text">{t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}</span>
-                {id !== undefined && <span className="token-chip-id">{id}</span>}
-              </span>
-            );
-          })}
-        </div>
+          {state.status === "error" && <div className="inference-error">{state.error}</div>}
+
+          {state.status === "ready" && state.displayTokens && (
+            <div className="token-chips">
+              {state.displayTokens.map((t, i) => {
+                const id = state.result?.tokenIds[i];
+                return (
+                  <button
+                    key={i}
+                    className={"token-chip" + (i === selectedTokenIndex ? " selected" : "")}
+                    onClick={() => onSelectToken(i)}
+                    title={`position ${i}${id !== undefined ? ` · token id ${id}` : ""}`}
+                  >
+                    <span className="token-chip-text">{t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}</span>
+                    {id !== undefined && <span className="token-chip-id">{id}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {compareEnabled && (
+            <form
+              className="inference-form prompt-b-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onRunB(promptB);
+              }}
+            >
+              <span className="inference-label">{t("inference.promptB")}</span>
+              <input value={promptB} onChange={(e) => setPromptB(e.target.value)} placeholder={t("inference.placeholderB")} />
+              <button type="submit" disabled={promptBState.status === "running" || forwardPassBlocked}>
+                {promptBState.status === "running" ? t("inference.running") : t("inference.runB")}
+              </button>
+            </form>
+          )}
+          {compareEnabled && promptBState.status === "error" && <div className="inference-error">{promptBState.error}</div>}
+          {compareEnabled && promptBState.status === "ready" && promptBState.displayTokens && (
+            <div className="token-chips token-chips-b">
+              {promptBState.displayTokens.map((t, i) => {
+                const id = promptBState.result?.tokenIds[i];
+                return (
+                  <span key={i} className="token-chip token-chip-readonly" title={id !== undefined ? `position ${i} · token id ${id}` : undefined}>
+                    <span className="token-chip-text">{t.trim() === "" ? "·".repeat(Math.max(1, t.length)) : t}</span>
+                    {id !== undefined && <span className="token-chip-id">{id}</span>}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
