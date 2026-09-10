@@ -261,7 +261,10 @@ input, select { font-family: inherit; }
 }
 .model-loader-github-link:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--bg-hover); }
 .model-loader-sub { color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5; }
-.model-loader-limitation { color: var(--text-tertiary); font-size: 12px; line-height: 1.5; margin-bottom: 20px; }
+.model-loader-limitation { color: var(--text-tertiary); font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
+.model-loader-sister { color: var(--text-tertiary); font-size: 12px; line-height: 1.5; margin-bottom: 20px; }
+.model-loader-sister a { color: var(--accent); text-decoration: none; font-weight: 500; white-space: nowrap; }
+.model-loader-sister a:hover { text-decoration: underline; }
 .model-loader-form { display: flex; gap: 8px; }
 .model-loader-form input {
   flex: 1;
