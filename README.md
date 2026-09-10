@@ -29,6 +29,17 @@ Note: the built-in presets are tiny, randomly-initialized test checkpoints,
 not real trained models — predictions won't be coherent. This tool is for
 exploring architecture and mechanics, not model quality.
 
+> **Curious about a GPU-backed version?**
+> [Aperture](https://github.com/Nice2008X/Aperture) is Tensorium's sister
+> project — the same interactive architecture graph, per-tensor heatmaps, and
+> causal interventions, but backed by a Python/FastAPI + PyTorch server that
+> loads real, full-size Hugging Face models (dense or MoE) onto an actual
+> NVIDIA GPU. With 4-/8-bit quantization, real streaming token generation with
+> a KV cache, occlusion-based token attribution, and MoE-routing /
+> attention-head analysis on models far larger than a browser tab can hold, it
+> trades this project's zero-install, runs-anywhere design for the ability to
+> poke at models at their real scale.
+
 ## Features
 
 - **Load any compatible Hugging Face model** by repo id — no upload, no
@@ -429,7 +440,10 @@ project's own reimplementation of the same idea.
 - Weights are downloaded as one in-memory buffer per model — fine for the
   tiny checkpoints this app targets, but a multi-GB checkpoint needs a
   backend doing true HTTP range reads behind the same `WeightProvider`
-  interface, which isn't implemented yet.
+  interface, which isn't implemented yet. The sister project
+  [Aperture](https://github.com/Nice2008X/Aperture) is the GPU-backed,
+  server-based take on the same problem — use it when you need real
+  full-size models rather than structure-only loads.
 - Inference is a single forward pass, not autoregressive generation.
 - The tokenizer doesn't handle special/added tokens, and has a known gap
   with unusual (doubled) whitespace against SentencePiece-style

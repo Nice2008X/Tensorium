@@ -212,6 +212,12 @@ export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excl
           </div>
           <div className="model-loader-sub">{t("loader.subtitle")}</div>
           <div className="model-loader-limitation">{t("loader.limitationNote")}</div>
+          <div className="model-loader-sister">
+            {t("loader.sisterNote")}{" "}
+            <a href="https://github.com/Nice2008X/Aperture" target="_blank" rel="noopener noreferrer">
+              {t("loader.sisterLink")}
+            </a>
+          </div>
         </>
       )}
       <div className="model-loader-source-tabs">
