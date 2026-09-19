@@ -6,7 +6,7 @@ An interactive, in-browser explorer and debugger for large language model
 internals. Point it at a Hugging Face repo that ships `safetensors`
 weights for one of the [supported architectures](#supported-architectures)
 (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5/Qwen3.8,
-Phi-3/4, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2) and it parses
+Phi-3/4, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2) and it parses
 the model's real config and weights, renders its architecture as a
 navigable graph — laid out by [ELK](https://eclipse.dev/elk/), the same
 layered-graph engine used by professional diagramming tools, not an ad
@@ -295,6 +295,7 @@ apps/
 | DeepSeek-V2 (MLA + DeepSeekMoE) | `adapter-deepseek-v2` | [`yujiepan/deepseek-v2-0628-tiny-random`](https://huggingface.co/yujiepan/deepseek-v2-0628-tiny-random) |
 | Gemma 4 (text decoder only) | `adapter-gemma4` | [`google/gemma-4-E2B`](https://huggingface.co/google/gemma-4-E2B) (real, structure-only) |
 | Qwen3.5 / Qwen3.8 (text decoder only) | `adapter-qwen3-5` | [`tiny-random/qwen3.5`](https://huggingface.co/tiny-random/qwen3.5) |
+| ZGCM-1 (sliding-window + gated attention) | `adapter-zgcm` | [`zgcagi/ZGCM-1-7B`](https://huggingface.co/zgcagi/ZGCM-1-7B) (real, structure-only) |
 
 These are all deliberately tiny (randomly-initialized, few-layer) test
 checkpoints, chosen so the full model can be loaded and explored instantly
@@ -316,6 +317,13 @@ config.json states them, leave some layers as plain dense FFNs).
 DeepSeek-V2's Multi-head Latent Attention and Qwen3.5/Qwen3.8's hybrid
 linear/recurrent attention decoder are both supported too, as real Model
 IR extensions rather than another `adapter-llama-family` flag.
+
+ZGCM-1 (custom `modeling_zgcm.py`, no transformers-native class) is a thin
+`adapter-llama-family` wrapper: per-layer sliding-window vs. full attention,
+a sigmoid attention-output gate on the sliding layers, QK-Norm, and a
+partial RoPE whose width is truncated (not rounded) to an even number. Its
+forward pass was checked against the model's own PyTorch code on a tiny
+random checkpoint (every layer's hidden state and the logits agree to ~1e-5).
 
 For a genuinely multimodal checkpoint (Gemma 4, Qwen3.5/Qwen3.8), only
 the text decoder is loaded — the vision (and, for Gemma 4, audio) towers

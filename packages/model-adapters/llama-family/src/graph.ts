@@ -35,6 +35,12 @@ export interface LlamaFamilyRawConfig {
   /** MoE checkpoints don't have to route every layer: a layer is sparse only if it isn't listed in mlp_only_layers AND (layer_idx + 1) % decoder_sparse_step === 0 — everything else runs the plain dense gated FFN instead. Qwen2-MoE's step is 1 (every layer sparse); Qwen3-MoE's is 2 (every other layer). Defaults (1, []) make every layer sparse when omitted, matching the common case. */
   decoder_sparse_step?: number;
   mlp_only_layers?: number[];
+  /** ZGCM-style hybrid attention (real config.json fields): a window size, and — per layer — whether it uses that window ("sliding_attention") or sees the whole sequence ("full_attention"). Only read when the adapter opts in via `perLayerSlidingWindow`. Missing `layer_types` falls back to the model's own rule: every `window_attn_skip_freq`-th layer (default 6) is full attention. */
+  sliding_window?: number | null;
+  layer_types?: string[];
+  window_attn_skip_freq?: number;
+  /** ZGCM: which layers carry a `g_proj` output gate. Missing means "every sliding-attention layer" (the model's own default). Only read when the adapter opts in via `attentionOutputGate`. */
+  attention_gate_layers?: boolean[];
 }
 
 export interface LlamaFamilyOptions {
@@ -60,6 +66,14 @@ export interface LlamaFamilyOptions {
   normType?: "rmsnorm" | "layernorm_no_affine";
   /** Qwen2-MoE/Qwen3-MoE: this checkpoint's FFN is a sparse Mixture-of-Experts (a router picks num_experts_per_tok of num_experts SwiGLU experts per token, weighted-summed) instead of one dense gated FFN. Not derivable from config.json alone (a dense model simply omits the MoE fields above), so — like qkvBias/qkNorm — the adapter states it explicitly. */
   moe?: boolean;
+  /** ZGCM: attention uses a per-layer window (config.json's `layer_types` + `sliding_window`) — sliding layers only see the last `sliding_window` tokens. Opt-in because other families (e.g. Mistral) list a `sliding_window` in config.json that this app has never applied. */
+  perLayerSlidingWindow?: boolean;
+  /** ZGCM: layers listed in `attention_gate_layers` have a separate `self_attn.g_proj` whose sigmoid multiplies the attention heads' output right before o_proj. */
+  attentionOutputGate?: boolean;
+  /** Weight-name suffixes (under `model.layers.N.`) of the norm run before attention and the one run before the FFN. Standard Llama-family names are `input_layernorm` / `post_attention_layernorm`; ZGCM calls them `post_attention_layernorm` / `post_feedforward_layernorm` even though both are ordinary pre-norms. */
+  normWeightNames?: { preAttention: string; preFfn: string };
+  /** How partial_rotary_factor turns into a rotary width. "round" (default) is what every existing adapter here uses; ZGCM's own code does `int(head_dim * factor)` then drops to an even number, which is not the same when the product isn't an integer (128 × 0.334 = 42.75 → 42, not 43). */
+  rotaryDimRounding?: "round" | "floor_even";
 }
 
 export function buildModelConfig(raw: LlamaFamilyRawConfig, options: LlamaFamilyOptions): ModelConfig {
@@ -69,7 +83,10 @@ export function buildModelConfig(raw: LlamaFamilyRawConfig, options: LlamaFamily
   // GLM-4 only rotates a leading slice of each head (the rest of the
   // dimensions pass through unrotated); every other adapter in this family
   // implicitly has partial_rotary_factor 1, so rotaryDim === headDim there.
-  const rotaryDim = Math.round(headDim * partialRotaryFactor);
+  const rotaryDim =
+    options.rotaryDimRounding === "floor_even"
+      ? Math.floor(headDim * partialRotaryFactor) - (Math.floor(headDim * partialRotaryFactor) % 2)
+      : Math.round(headDim * partialRotaryFactor);
 
   // RoPE rotates its dimensions in (x, y) pairs (see nn-ops'
   // ropeCosSin/rotateHalf), so it's only defined for an even rotary
@@ -87,6 +104,19 @@ export function buildModelConfig(raw: LlamaFamilyRawConfig, options: LlamaFamily
   }
 
   const normType = options.normType ?? "rmsnorm";
+
+  // Per-layer hybrid attention (ZGCM). Same defaults as the model's own
+  // config class: every skip_freq-th layer is full attention, and only the
+  // sliding layers carry an output gate unless attention_gate_layers says otherwise.
+  const layerTypes = Array.from({ length: raw.num_hidden_layers }, (_, i) =>
+    raw.layer_types?.[i] ?? ((i + 1) % (raw.window_attn_skip_freq ?? 6) === 0 ? "full_attention" : "sliding_attention")
+  );
+  const slidingWindowSizes: (number | null)[] = layerTypes.map((t) =>
+    options.perLayerSlidingWindow && t === "sliding_attention" && raw.sliding_window != null ? raw.sliding_window : null
+  );
+  const attentionGateLayers: boolean[] = layerTypes.map((t, i) =>
+    options.attentionOutputGate ? Boolean(raw.attention_gate_layers?.[i] ?? t === "sliding_attention") : false
+  );
   // OLMo's LayerNorm has no config.json field for epsilon — HF hardcodes
   // 1e-5 for it. rms_norm_eps (default 1e-6) is a different family's knob;
   // only fall back to it here if a checkpoint's config explicitly sets it.
@@ -104,6 +134,12 @@ export function buildModelConfig(raw: LlamaFamilyRawConfig, options: LlamaFamily
       numKeyValueHeads: raw.num_key_value_heads ?? numHeads,
       headDim,
       partialRotaryFactor,
+      rotaryDim,
+      slidingWindowSizes,
+      attentionGateLayers,
+      preAttentionNormName: options.normWeightNames?.preAttention ?? "input_layernorm",
+      preFfnNormName: options.normWeightNames?.preFfn ?? "post_attention_layernorm",
+      perLayerSlidingWindow: options.perLayerSlidingWindow ?? false,
       rmsNormEps: normEps,
       activationFunction: raw.hidden_act ?? "silu",
       ropeTheta: raw.rope_theta ?? 10000,
@@ -168,6 +204,11 @@ export function buildGraph(metadata: ModelMetadata, providerId: string): Model {
   const hasSharedExpert = cfg.extra.hasSharedExpert === true;
   const decoderSparseStep = Number(cfg.extra.decoderSparseStep ?? 1);
   const mlpOnlyLayers = (cfg.extra.mlpOnlyLayers as number[] | undefined) ?? [];
+  const preAttentionNormName = String(cfg.extra.preAttentionNormName ?? "input_layernorm");
+  const preFfnNormName = String(cfg.extra.preFfnNormName ?? "post_attention_layernorm");
+  const perLayerSlidingWindow = cfg.extra.perLayerSlidingWindow === true;
+  const slidingWindowSizes = (cfg.extra.slidingWindowSizes as (number | null)[] | undefined) ?? [];
+  const attentionGateLayers = (cfg.extra.attentionGateLayers as boolean[] | undefined) ?? [];
   // Not every layer of an MoE checkpoint has to be sparse — Qwen2-MoE routes
   // every layer (step 1), Qwen3-MoE only every other one (step 2), and
   // either family can also name specific always-dense layers explicitly.
@@ -258,14 +299,30 @@ export function buildGraph(metadata: ModelMetadata, providerId: string): Model {
     edge(prevOut, b);
 
     const rms1 = `${b}.rms1`;
-    normNode(rms1, normLabel("pre-attention"), b, `${L}.input_layernorm.weight`);
+    normNode(rms1, normLabel("pre-attention"), b, `${L}.${preAttentionNormName}.weight`);
     edge(b, rms1);
 
     const attn = `${b}.attn`;
-    node(attn, "attention", "Attention", b, {
+    const layerWindow = slidingWindowSizes[i] ?? null;
+    const layerHasGate = attentionGateLayers[i] === true;
+    node(attn, "attention", perLayerSlidingWindow ? `Attention (${layerWindow != null ? "sliding" : "full"})` : "Attention", b, {
       inputs: [{ dims: seqH }],
       outputs: [{ dims: seqH }],
-      metadata: { numHeads: cfg.numHeads, numKeyValueHeads: numKVHeads, headDim, groupedQueryAttention: numKVHeads !== cfg.numHeads },
+      metadata: {
+        numHeads: cfg.numHeads,
+        numKeyValueHeads: numKVHeads,
+        headDim,
+        groupedQueryAttention: numKVHeads !== cfg.numHeads,
+        ...(perLayerSlidingWindow
+          ? {
+              slidingWindow: layerWindow ?? undefined,
+              description:
+                layerWindow != null
+                  ? `Causal attention restricted to the last ${layerWindow} positions (a local window) — most layers in this model are this cheaper local form.`
+                  : "Ordinary causal attention over the whole sequence — one of the periodic full-attention layers that give every token eventual access to the whole context.",
+            }
+          : {}),
+      },
     });
 
     const q = `${attn}.q`;
@@ -362,14 +419,46 @@ export function buildGraph(metadata: ModelMetadata, providerId: string): Model {
     edge(qIntoRope, rope);
     edge(kIntoRope, rope);
 
+    // ZGCM's attention output gate: a separate g_proj reads the same
+    // pre-attention-normed input as Q/K/V, and its sigmoid scales the
+    // attention heads' output elementwise right before the output projection.
+    let attnResultSource = rope;
+    let gateActId: string | null = null;
+    if (layerHasGate) {
+      const gateId = `${attn}.gate`;
+      node(gateId, "linear", "Attention Output Gate", attn, {
+        inputs: [{ dims: seqH }],
+        outputs: [{ dims: ["sequence_length", qDim] }],
+        parameters: [param(`${L}.self_attn.g_proj.weight`, wi, providerId)],
+      });
+      edge(rms1, gateId);
+
+      gateActId = `${attn}.gate_act`;
+      node(gateActId, "activation", "sigmoid", attn, {
+        inputs: [{ dims: ["sequence_length", qDim] }],
+        outputs: [{ dims: ["sequence_length", qDim] }],
+      });
+      edge(gateId, gateActId);
+
+      const gatedMul = `${attn}.gated_mul`;
+      node(gatedMul, "elementwise_mul", "× Output Gate", attn, {
+        inputs: [{ dims: ["sequence_length", qDim] }, { dims: ["sequence_length", qDim] }],
+        outputs: [{ dims: ["sequence_length", qDim] }],
+      });
+      edge(rope, gatedMul);
+      edge(v, gatedMul);
+      edge(gateActId, gatedMul);
+      attnResultSource = gatedMul;
+    }
+
     const outp = `${attn}.out`;
     node(outp, "output_projection", "Output Projection", attn, {
       inputs: [{ dims: seqH }],
       outputs: [{ dims: seqH }],
       parameters: [param(`${L}.self_attn.o_proj.weight`, wi, providerId)],
     });
-    edge(rope, outp);
-    edge(v, outp);
+    edge(attnResultSource, outp);
+    if (!gateActId) edge(v, outp);
 
     // GLM-4's sandwich norm: an extra RMSNorm on the attention sub-layer's
     // *output*, on top of (not instead of) rms1's pre-attention norm —
@@ -392,7 +481,7 @@ export function buildGraph(metadata: ModelMetadata, providerId: string): Model {
     edge(b, res1, "skip");
 
     const rms2 = `${b}.rms2`;
-    normNode(rms2, normLabel("pre-FFN"), b, `${L}.post_attention_layernorm.weight`);
+    normNode(rms2, normLabel("pre-FFN"), b, `${L}.${preFfnNormName}.weight`);
     edge(res1, rms2);
 
     const layerIsSparse = isSparseLayer(i);

@@ -13,6 +13,7 @@ import { Qwen3MoeAdapter } from "@tensorium/adapter-qwen3-moe";
 import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
 import { Gemma4Adapter } from "@tensorium/adapter-gemma4";
 import { Qwen35Adapter } from "@tensorium/adapter-qwen3-5";
+import { ZgcmAdapter } from "@tensorium/adapter-zgcm";
 import { GenericAdapter } from "@tensorium/adapter-generic";
 
 /**
@@ -82,6 +83,7 @@ export const NAMED_ADAPTERS: ModelAdapter[] = [
   DeepseekV2Adapter,
   Gemma4Adapter,
   Qwen35Adapter,
+  ZgcmAdapter,
 ];
 
 export { GenericAdapter };
@@ -142,6 +144,12 @@ export const PRESET_MODELS = [
   {
     repo: "google/gemma-4-E2B",
     label: "Gemma 4 E2B (real, text-only) · 35 layers, sliding+global attention, per-layer embeddings, ~10 GB",
+    isMoE: false,
+    isLarge: true,
+  },
+  {
+    repo: "zgcagi/ZGCM-1-7B",
+    label: "ZGCM-1-7B (real) · 32 layers, sliding-window + gated attention, QK-Norm, partial RoPE, sharded, 14.8 GB",
     isMoE: false,
     isLarge: true,
   },

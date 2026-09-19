@@ -43,7 +43,7 @@ const en = {
   "app.unknownModelDialogConfirm": "Load anyway",
 
   "loader.title": "Tensorium",
-  "loader.subtitle": "Load a Hugging Face model from a supported architecture — GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2 — with safetensors weights, and inspect its structure, live.",
+  "loader.subtitle": "Load a Hugging Face model from a supported architecture — GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2 — with safetensors weights, and inspect its structure, live.",
   "loader.limitationNote": "Note: the built-in presets are tiny, randomly-initialized test checkpoints, not real trained models — predictions won't be coherent. This tool is for exploring architecture and mechanics, not model quality.",
   "loader.sisterNote": "Curious about a GPU-backed version? Tensorium's sister project, Aperture, loads real, full-size models onto an actual NVIDIA GPU — with 4-/8-bit quantization, live forward passes and token streaming, and causal interventions to poke at what you load.",
   "loader.sisterLink": "Aperture on GitHub →",
@@ -286,7 +286,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "仍然加载",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "加载支持的 Hugging Face 模型架构（GPT-2、Llama、Mistral、Gemma、Gemma 4、Qwen2、Qwen3、Qwen3.5、Phi、GLM-4、OLMo、Qwen2-MoE、Qwen3-MoE 或 DeepSeek-V2）及其 safetensors 权重，实时查看其结构。",
+    "loader.subtitle": "加载支持的 Hugging Face 模型架构（GPT-2、Llama、Mistral、Gemma、Gemma 4、Qwen2、Qwen3、Qwen3.5、Phi、GLM-4、ZGCM、OLMo、Qwen2-MoE、Qwen3-MoE 或 DeepSeek-V2）及其 safetensors 权重，实时查看其结构。",
     "loader.limitationNote": "注意：内置的预设模型是随机初始化的小型测试权重，并非真实训练模型——预测结果不会连贯有意义。本工具用于探索模型架构与运作机制，而非评估模型质量。",
     "loader.sisterNote": "想试试带 GPU 后端的版本？Tensorium 的姊妹项目 Aperture 可将完整的真实模型加载到真实的 NVIDIA GPU 上——支持 4/8 位量化、实时前向传播与逐 token 流式输出，以及用于探究模型的因果干预。",
     "loader.sisterLink": "在 GitHub 上查看 Aperture →",
@@ -524,7 +524,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Cargar de todos modos",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Carga un modelo de Hugging Face de una arquitectura compatible (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE o DeepSeek-V2) con pesos safetensors, e inspecciona su estructura en vivo.",
+    "loader.subtitle": "Carga un modelo de Hugging Face de una arquitectura compatible (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE o DeepSeek-V2) con pesos safetensors, e inspecciona su estructura en vivo.",
     "loader.limitationNote": "Nota: los modelos preconfigurados incluidos son checkpoints de prueba diminutos e inicializados aleatoriamente, no modelos realmente entrenados — las predicciones no serán coherentes. Esta herramienta sirve para explorar la arquitectura y el funcionamiento del modelo, no su calidad.",
     "loader.sisterNote": "¿Te interesa una versión con GPU? El proyecto hermano de Tensorium, Aperture, carga modelos reales de tamaño completo en una GPU NVIDIA real — con cuantización de 4/8 bits, pases hacia adelante en vivo y transmisión de tokens, e intervenciones causales para experimentar con lo que cargas.",
     "loader.sisterLink": "Aperture en GitHub →",
@@ -762,7 +762,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Charger quand même",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Chargez un modèle Hugging Face d'une architecture prise en charge (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE ou DeepSeek-V2) avec des poids safetensors, et inspectez sa structure en direct.",
+    "loader.subtitle": "Chargez un modèle Hugging Face d'une architecture prise en charge (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE ou DeepSeek-V2) avec des poids safetensors, et inspectez sa structure en direct.",
     "loader.limitationNote": "Remarque : les préréglages fournis sont de minuscules checkpoints de test initialisés aléatoirement, pas de vrais modèles entraînés — les prédictions ne seront pas cohérentes. Cet outil sert à explorer l'architecture et le fonctionnement du modèle, pas sa qualité.",
     "loader.sisterNote": "Envie d'une version accélérée par GPU ? Le projet frère de Tensorium, Aperture, charge de vrais modèles de taille réelle sur un GPU NVIDIA — avec quantification 4/8 bits, passes avant en direct et streaming de tokens, et interventions causales pour expérimenter sur ce que vous chargez.",
     "loader.sisterLink": "Aperture sur GitHub →",
@@ -1000,7 +1000,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Trotzdem laden",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Lade ein Hugging-Face-Modell einer unterstützten Architektur (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE oder DeepSeek-V2) mit Safetensors-Gewichten und untersuche seine Struktur live.",
+    "loader.subtitle": "Lade ein Hugging-Face-Modell einer unterstützten Architektur (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE oder DeepSeek-V2) mit Safetensors-Gewichten und untersuche seine Struktur live.",
     "loader.limitationNote": "Hinweis: Die integrierten Presets sind winzige, zufällig initialisierte Test-Checkpoints, keine echten trainierten Modelle — Vorhersagen sind nicht kohärent. Dieses Tool dient der Erkundung von Architektur und Funktionsweise, nicht der Modellqualität.",
     "loader.sisterNote": "Neugierig auf eine GPU-gestützte Variante? Tensoriums Schwesterprojekt Aperture lädt echte Modelle in voller Größe auf eine echte NVIDIA-GPU — mit 4-/8-Bit-Quantisierung, Live-Forward-Pässen und Token-Streaming sowie kausalen Eingriffen, um an dem zu experimentieren, was du lädst.",
     "loader.sisterLink": "Aperture auf GitHub →",
@@ -1238,7 +1238,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "それでも読み込む",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "対応アーキテクチャ（GPT-2、Llama、Mistral、Gemma、Gemma 4、Qwen2、Qwen3、Qwen3.5、Phi、GLM-4、OLMo、Qwen2-MoE、Qwen3-MoE、DeepSeek-V2 のいずれか）の Hugging Face モデルを safetensors 形式の重みとともに読み込み、その構造をライブで確認できます。",
+    "loader.subtitle": "対応アーキテクチャ（GPT-2、Llama、Mistral、Gemma、Gemma 4、Qwen2、Qwen3、Qwen3.5、Phi、GLM-4、ZGCM、OLMo、Qwen2-MoE、Qwen3-MoE、DeepSeek-V2 のいずれか）の Hugging Face モデルを safetensors 形式の重みとともに読み込み、その構造をライブで確認できます。",
     "loader.limitationNote": "注記: 内蔵のプリセットはランダム初期化された小さなテスト用チェックポイントであり、実際に学習済みのモデルではありません。予測結果に一貫性はありません。このツールはモデルの品質ではなく、アーキテクチャと仕組みを探索するためのものです。",
     "loader.sisterNote": "GPU バックエンド版が気になりますか？Tensorium の姉妹プロジェクト Aperture は、実際の NVIDIA GPU 上でフルサイズの実モデルを読み込みます。4/8 ビット量子化、リアルタイムの順伝播とトークンストリーミング、読み込んだモデルを調べるための因果介入に対応しています。",
     "loader.sisterLink": "GitHub で Aperture を見る →",
@@ -1476,7 +1476,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "그래도 로드",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "지원되는 아키텍처(GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE, DeepSeek-V2 중 하나)의 Hugging Face 모델을 safetensors 가중치와 함께 불러와 구조를 실시간으로 살펴보세요.",
+    "loader.subtitle": "지원되는 아키텍처(GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE, DeepSeek-V2 중 하나)의 Hugging Face 모델을 safetensors 가중치와 함께 불러와 구조를 실시간으로 살펴보세요.",
     "loader.limitationNote": "참고: 기본 제공되는 프리셋은 무작위로 초기화된 작은 테스트용 체크포인트이며 실제 학습된 모델이 아닙니다. 예측 결과는 일관성이 없습니다. 이 도구는 모델 품질이 아니라 아키텍처와 동작 방식을 탐색하기 위한 것입니다.",
     "loader.sisterNote": "GPU 백엔드 버전이 궁금하신가요? Tensorium의 자매 프로젝트 Aperture는 실제 NVIDIA GPU에서 전체 크기의 실제 모델을 불러옵니다. 4/8비트 양자화, 실시간 순전파와 토큰 스트리밍, 불러온 모델을 살펴보기 위한 인과적 개입을 지원합니다.",
     "loader.sisterLink": "GitHub에서 Aperture 보기 →",
@@ -1714,7 +1714,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Carregar mesmo assim",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Carregue um modelo do Hugging Face de uma arquitetura compatível (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE ou DeepSeek-V2) com pesos safetensors e inspecione sua estrutura ao vivo.",
+    "loader.subtitle": "Carregue um modelo do Hugging Face de uma arquitetura compatível (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE ou DeepSeek-V2) com pesos safetensors e inspecione sua estrutura ao vivo.",
     "loader.limitationNote": "Nota: os modelos predefinidos incluídos são checkpoints de teste minúsculos e inicializados aleatoriamente, não modelos realmente treinados — as previsões não serão coerentes. Esta ferramenta serve para explorar a arquitetura e o funcionamento do modelo, não sua qualidade.",
     "loader.sisterNote": "Curioso sobre uma versão com GPU? O projeto irmão do Tensorium, Aperture, carrega modelos reais em tamanho completo numa GPU NVIDIA real — com quantização de 4/8 bits, passagens diretas ao vivo e streaming de tokens, e intervenções causais para experimentar com o que você carrega.",
     "loader.sisterLink": "Aperture no GitHub →",
@@ -1952,7 +1952,7 @@ export const translations: Record<Language, Record<TranslationKey, string>> = {
     "app.unknownModelDialogConfirm": "Всё равно загрузить",
 
     "loader.title": "Tensorium",
-    "loader.subtitle": "Загрузите модель Hugging Face одной из поддерживаемых архитектур (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, OLMo, Qwen2-MoE, Qwen3-MoE или DeepSeek-V2) с весами safetensors и изучите её структуру в реальном времени.",
+    "loader.subtitle": "Загрузите модель Hugging Face одной из поддерживаемых архитектур (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5, Phi, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE или DeepSeek-V2) с весами safetensors и изучите её структуру в реальном времени.",
     "loader.limitationNote": "Примечание: встроенные пресеты — это крошечные тестовые чекпойнты со случайной инициализацией, а не реально обученные модели — предсказания не будут связными. Этот инструмент предназначен для изучения архитектуры и механики модели, а не её качества.",
     "loader.sisterNote": "Интересует версия с поддержкой GPU? Родственный проект Tensorium — Aperture — загружает настоящие полноразмерные модели на реальный GPU NVIDIA: с 4-/8-битной квантизацией, прямыми проходами в реальном времени и потоковой генерацией токенов, а также каузальными вмешательствами, чтобы поэкспериментировать с тем, что вы загрузили.",
     "loader.sisterLink": "Aperture на GitHub →",
