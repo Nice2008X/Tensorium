@@ -100,6 +100,8 @@ export interface ModelConfig {
   intermediateSize: number;
   vocabSize: number;
   contextLength: number;
+  /** Set only for a sequence-classification checkpoint (no LM head): class index -> label. Output ids are then class indices, not vocabulary tokens. */
+  classLabels?: string[];
   /** Anything architecture-specific that doesn't fit the common fields above. */
   extra: Record<string, unknown>;
 }

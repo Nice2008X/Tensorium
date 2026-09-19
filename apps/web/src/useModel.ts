@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DownloadCancelledError, DownloadControl, type LoadProgress, type Model, type ModelAdapter, type ModelMetadata, type ModelSource, type WeightProvider, type WeightsBuffer, type WeightsMode } from "@tensorium/model-ir";
-import { canDownloadWeights, fetchArrayBuffer, fetchModelStructure, hfResolveUrl, LARGE_MODEL_WARNING_BYTES, peekModelType, type HfConfigPreview } from "@tensorium/hf-client";
+import { canDownloadWeights, fetchArrayBuffer, fetchModelStructure, hfResolveUrl, isValidHfRepoSpec, LARGE_MODEL_WARNING_BYTES, MAX_CONFIG_BYTES, MAX_TOKENIZER_BYTES, parseHfRepoSpec, peekModelType, type HfConfigPreview } from "@tensorium/hf-client";
 import { loadTokenizer, type Tokenizer } from "@tensorium/tokenizer";
 import { NAMED_ADAPTERS, GenericAdapter } from "./adapters.js";
 import { normalizeRepoId } from "./format.js";
+import { checkJsonFile, checkWeightsFile, type FileCheck } from "./localFileValidation.js";
 
 /**
  * Remembers the last Hugging-Face-sourced model across a page reload, so
@@ -18,7 +19,9 @@ const LAST_REPO_KEY = "app:last-repo";
 
 function readPersistedRepo(): string | null {
   try {
-    return window.localStorage.getItem(LAST_REPO_KEY);
+    const repo = window.localStorage.getItem(LAST_REPO_KEY);
+    // localStorage is editable by anything on the origin — never trust it as a repo id.
+    return repo && isValidHfRepoSpec(repo) ? repo : null;
   } catch {
     return null;
   }
@@ -61,7 +64,7 @@ export interface ModelState {
 /** config.json/tokenizer.json are small — a Hugging Face source hits the IndexedDB cache (already populated by loadMetadata/loadTokenizer above, so this is free) and a local source just reads the file it already has in memory. Missing/failed reads (e.g. no tokenizer.json) resolve to undefined rather than failing the whole load. */
 async function readRawFile(source: ModelSource, filename: string): Promise<ArrayBuffer | undefined> {
   try {
-    return source.kind === "local" ? source.files[filename] : await fetchArrayBuffer(hfResolveUrl(source, filename));
+    return source.kind === "local" ? source.files[filename] : await fetchArrayBuffer(hfResolveUrl(source, filename), filename === "tokenizer.json" ? MAX_TOKENIZER_BYTES : MAX_CONFIG_BYTES);
   } catch {
     return undefined;
   }
@@ -138,6 +141,7 @@ export function useModel() {
       setState({ status: "loading" });
       setProgress({ phase: "config" });
       try {
+        if (source.kind === "huggingface") parseHfRepoSpec(source.repo);
         // A big checkpoint gets an explicit "download weights or structure
         // only?" choice before anything heavy is fetched. Only the cheap
         // Range-request size probe runs here (memoized, so loading the
@@ -230,6 +234,14 @@ export function useModel() {
     async (files: { name: string; config: File; weights: File; tokenizer?: File }) => {
       setState({ status: "loading" });
       try {
+        // The loader form already checks each file when it's picked, but this is the boundary that actually reads them into memory, so it doesn't rely on its caller having done so.
+        const checks: FileCheck[] = await Promise.all([
+          checkJsonFile(files.config, "config"),
+          checkWeightsFile(files.weights),
+          files.tokenizer ? checkJsonFile(files.tokenizer, "tokenizer") : { ok: true },
+        ]);
+        const rejected = checks.find((c) => !c.ok);
+        if (rejected) throw new Error(rejected.error ?? "Unsupported file.");
         const [configBytes, weightsBytes, tokenizerBytes] = await Promise.all([
           files.config.arrayBuffer(),
           files.weights.arrayBuffer(),

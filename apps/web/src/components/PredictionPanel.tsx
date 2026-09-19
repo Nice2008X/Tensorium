@@ -1,12 +1,14 @@
 import type { ActivationCapture } from "@tensorium/model-ir";
 import type { Tokenizer } from "@tensorium/tokenizer";
-import { topKFromLogits } from "../logits.js";
+import { outputTokenLabel, topKFromLogits } from "../logits.js";
 import { formatPercent } from "../format.js";
 import { useTranslation } from "./LanguageContext.js";
 
 interface Props {
   result: ActivationCapture;
   tokenizer: Tokenizer;
+  /** Set for a sequence-classification model — output ids are then class indices, shown by label instead of decoded as tokens. */
+  classLabels?: string[];
   selectedTokenIndex: number | null;
   onViewWhy: () => void;
   /** Lifted to App so the "maximize graph" control can collapse/expand this panel together with the tree/inspector/bottom panels, not just this panel's own toggle. */
@@ -22,7 +24,7 @@ interface Props {
  * ExperimentPanel's before/after comparison) so this needs no new
  * computation, just a place to show it without digging into a bottom tab.
  */
-export function PredictionPanel({ result, tokenizer, selectedTokenIndex, onViewWhy, collapsed, onToggleCollapsed, promptLabel }: Props) {
+export function PredictionPanel({ result, tokenizer, classLabels, selectedTokenIndex, onViewWhy, collapsed, onToggleCollapsed, promptLabel }: Props) {
   const { t } = useTranslation();
   // A stale selectedTokenIndex from a longer previous prompt (App only
   // resets it on model change, not on every re-run) would otherwise index
@@ -52,7 +54,7 @@ export function PredictionPanel({ result, tokenizer, selectedTokenIndex, onViewW
       {!collapsed && (
         <div className="prediction-rows">
           {ranked.map((r) => {
-            const display = tokenizer.decodeToken(r.tokenId);
+            const display = outputTokenLabel(tokenizer, classLabels, r.tokenId);
             return (
               <div key={r.tokenId} className="prediction-row">
                 <span className="prediction-token">{display.trim() || `#${r.tokenId}`}</span>

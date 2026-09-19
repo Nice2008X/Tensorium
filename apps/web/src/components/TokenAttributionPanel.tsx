@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Model, ModelAdapter, WeightProvider } from "@tensorium/model-ir";
 import { computeTokenAttribution, computeHeadAttribution, type TokenAttributionResult, type HeadAttributionResult } from "@tensorium/interpretability";
 import type { Tokenizer } from "@tensorium/tokenizer";
+import { outputTokenLabel } from "../logits.js";
 import { useTranslation } from "./LanguageContext.js";
 
 interface Props {
@@ -97,7 +98,7 @@ export function TokenAttributionPanel({ model, weightProvider, adapter, tokenIds
   if (!result || !headResult) return sourceToggle ? <div className="token-attribution">{sourceToggle}</div> : null;
 
   const maxAbs = Math.max(...result.entries.map((e) => Math.abs(e.logitDrop)), 1e-9);
-  const targetDisplay = tokenizer.decodeToken(result.targetTokenId) || `#${result.targetTokenId}`;
+  const targetDisplay = outputTokenLabel(tokenizer, model.config.classLabels, result.targetTokenId) || `#${result.targetTokenId}`;
   const positionNote = predictIndex !== activeTokenIds.length - 1 ? ` at position ${predictIndex}` : "";
 
   const topHeads = [...headResult.entries].sort((a, b) => Math.abs(b.logitDrop) - Math.abs(a.logitDrop)).slice(0, 8);

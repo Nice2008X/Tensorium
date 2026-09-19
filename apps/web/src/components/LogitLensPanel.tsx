@@ -3,6 +3,7 @@ import type { Model, WeightProvider, ActivationCapture } from "@tensorium/model-
 import { computeLogitLens, type LogitLensEntry } from "@tensorium/interpretability";
 import type { Tokenizer } from "@tensorium/tokenizer";
 import { formatPercent } from "../format.js";
+import { outputTokenLabel } from "../logits.js";
 import { useTranslation } from "./LanguageContext.js";
 
 interface Props {
@@ -90,7 +91,7 @@ export function LogitLensPanel({ model, weightProvider, capture, promptBCapture,
               <div className="logit-lens-bars">
                 {layer.topTokens.map((t, i) => (
                   <div key={i} className="logit-lens-token" style={{ opacity: 0.4 + 0.6 * t.prob }} title={formatPercent(t.prob)}>
-                    <span className="logit-lens-token-text">{tokenizer.decodeToken(t.tokenId) || `#${t.tokenId}`}</span>
+                    <span className="logit-lens-token-text">{outputTokenLabel(tokenizer, model.config.classLabels, t.tokenId) || `#${t.tokenId}`}</span>
                     <span className="logit-lens-token-prob">{formatPercent(t.prob)}</span>
                   </div>
                 ))}

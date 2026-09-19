@@ -24,6 +24,8 @@ import { numElements, dtypeSize, modelSourceLabel } from "@tensorium/model-ir";
 export interface Qwen35RawConfig {
   model_type?: string;
   architectures?: string[];
+  /** Present on a `Qwen3_5ForSequenceClassification` checkpoint (e.g. AlexWortega/openjev): class index -> label. */
+  id2label?: Record<string, string>;
   text_config: Qwen35TextRawConfig;
 }
 
@@ -58,6 +60,13 @@ export interface Qwen35TextRawConfig {
   rope_parameters?: { rope_theta?: number; rope_type?: string } | null;
 }
 
+/** The class labels of a sequence-classification checkpoint, in class-index order — undefined for an ordinary causal LM. */
+function classLabelsOf(raw: Qwen35RawConfig): string[] | undefined {
+  if (!(raw.architectures ?? []).some((a) => a.endsWith("ForSequenceClassification"))) return undefined;
+  const entries = Object.entries(raw.id2label ?? {}).sort((a, b) => Number(a[0]) - Number(b[0]));
+  return entries.length > 0 ? entries.map(([, label]) => label) : undefined;
+}
+
 export function buildModelConfig(raw: Qwen35RawConfig): ModelConfig {
   const t = raw.text_config;
   const numLayers = t.num_hidden_layers;
@@ -75,6 +84,7 @@ export function buildModelConfig(raw: Qwen35RawConfig): ModelConfig {
     intermediateSize: t.intermediate_size,
     vocabSize: t.vocab_size,
     contextLength: t.max_position_embeddings ?? 262144,
+    classLabels: classLabelsOf(raw),
     extra: {
       rmsNormEps: t.rms_norm_eps ?? 1e-6,
       activationFunction: t.hidden_act ?? "silu",
@@ -492,19 +502,44 @@ export function buildGraph(metadata: ModelMetadata, providerId: string): Model {
   normNode(finalNorm, "Final RMSNorm", "model", `${LP}.norm.weight`, H);
   edge(prevOut, finalNorm);
 
-  const tied = !wi["lm_head.weight"];
-  node("lm_head", "lm_head", "LM Head", "model", {
-    inputs: [{ dims: seqH }],
-    outputs: [{ dims: ["sequence_length", cfg.vocabSize] }],
-    parameters: [param(tied ? `${LP}.embed_tokens.weight` : "lm_head.weight", wi, providerId)],
-    metadata: { tied, description: tied ? "Tied to the token embedding weight (transposed)." : undefined },
-  });
-  edge(finalNorm, "lm_head");
+  const classLabels = cfg.classLabels;
+  if (classLabels) {
+    // Qwen3_5ForSequenceClassification: no lm_head — a single bias-free
+    // `score` Linear over the final-normed hidden state, whose output at the
+    // last (non-pad) token is the prediction. Applied here at every position
+    // (as HF does before it picks the last token) so per-position views work.
+    const numClasses = classLabels.length;
+    node("lm_head", "lm_head", "Score Head (classifier)", "model", {
+      inputs: [{ dims: seqH }],
+      outputs: [{ dims: ["sequence_length", numClasses] }],
+      parameters: [param("score.weight", wi, providerId)],
+      metadata: {
+        classLabels,
+        description: `Sequence-classification head instead of a language-model head: a bias-free Linear ${H} → ${numClasses} over the final-normed hidden state (${classLabels.join(" / ")}). The model's answer is this head's output at the last non-padding token — the model never generates text.`,
+      },
+    });
+    edge(finalNorm, "lm_head");
 
-  node("output", "output", "Logits", "model", {
-    inputs: [{ dims: ["sequence_length", cfg.vocabSize] }],
-  });
-  edge("lm_head", "output");
+    node("output", "output", "Class logits", "model", {
+      inputs: [{ dims: ["sequence_length", numClasses] }],
+      metadata: { classLabels, description: `Raw logits over the ${numClasses} classes (${classLabels.join(", ")}) at every position; softmax at the last token gives the class probabilities.` },
+    });
+    edge("lm_head", "output");
+  } else {
+    const tied = !wi["lm_head.weight"];
+    node("lm_head", "lm_head", "LM Head", "model", {
+      inputs: [{ dims: seqH }],
+      outputs: [{ dims: ["sequence_length", cfg.vocabSize] }],
+      parameters: [param(tied ? `${LP}.embed_tokens.weight` : "lm_head.weight", wi, providerId)],
+      metadata: { tied, description: tied ? "Tied to the token embedding weight (transposed)." : undefined },
+    });
+    edge(finalNorm, "lm_head");
+
+    node("output", "output", "Logits", "model", {
+      inputs: [{ dims: ["sequence_length", cfg.vocabSize] }],
+    });
+    edge("lm_head", "output");
+  }
 
   return {
     id: modelSourceLabel(metadata.source),

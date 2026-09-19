@@ -98,7 +98,11 @@ export interface ByteLevelResolution {
 // these patterns is a case-sensitive literal, so converting the scoped flag
 // to a global `i` flag is behavior-preserving here rather than a narrow
 // one-off hack.
+const MAX_SPLIT_REGEX_LENGTH = 2048;
+
 function toJsRegex(pattern: string): RegExp | null {
+  // Real split patterns are a few hundred characters. A tokenizer.json from an untrusted repo could ship a huge or catastrophically-backtracking one, and this regex runs on the main thread over every prompt; refuse the oversized ones (the caller falls back to its default splitter).
+  if (pattern.length > MAX_SPLIT_REGEX_LENGTH) return null;
   const jsPattern = pattern.replace(/\(\?i:/g, "(?:");
   try {
     return new RegExp(jsPattern, "gui");
