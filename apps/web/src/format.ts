@@ -29,3 +29,16 @@ export function formatBytes(n: number): string {
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)} KB`;
   return `${n} B`;
 }
+
+/** Reduces a pasted Hugging Face model URL (e.g. https://huggingface.co/Qwen/Qwen3-1.7B/tree/main?x=1) to its `org/name` repo id. Anything that isn't an HF URL is returned trimmed and otherwise untouched. */
+export function normalizeRepoId(input: string): string {
+  const trimmed = input.trim();
+  const match = trimmed.match(/^(?:https?:\/\/)?(?:www\.)?(?:huggingface\.co|hf\.co)\/(.+)$/i);
+  if (!match) return trimmed;
+  const segments = match[1]
+    .split(/[?#]/)[0]
+    .split("/")
+    .filter(Boolean);
+  if (segments[0] === "models") segments.shift();
+  return segments.slice(0, 2).join("/");
+}

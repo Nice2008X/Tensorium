@@ -3,7 +3,7 @@ import type { LoadProgress } from "@tensorium/model-ir";
 import { PRESET_MODELS } from "../adapters.js";
 import { useTranslation } from "./LanguageContext.js";
 import { checkJsonFile, checkWeightsFile, type FileCheck } from "../localFileValidation.js";
-import { formatBytes } from "../format.js";
+import { formatBytes, normalizeRepoId } from "../format.js";
 import { LoadProgressBar } from "./LoadProgressBar.js";
 
 export interface LocalModelFiles {
@@ -17,6 +17,10 @@ interface Props {
   status: "idle" | "loading" | "ready" | "error";
   error?: string;
   progress?: LoadProgress;
+  downloadPaused?: boolean;
+  onPauseDownload?: () => void;
+  onResumeDownload?: () => void;
+  onStopDownload?: () => void;
   onLoad: (repo: string) => void;
   onLoadLocal: (files: LocalModelFiles) => void;
   /** Presets matching this repo id are left out of the list — used when re-opening the loader for a model that's already loaded, so it isn't offered back as if it were a fresh option. */
@@ -138,7 +142,7 @@ function FileRowStatus({ file, validation }: { file: File | null; validation: Va
   return null;
 }
 
-export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excludeRepo, embedded }: Props) {
+export function ModelLoader({ status, error, progress, downloadPaused, onPauseDownload, onResumeDownload, onStopDownload, onLoad, onLoadLocal, excludeRepo, embedded }: Props) {
   const { t } = useTranslation();
   const sortedPresets = useMemo(
     () => PRESET_MODELS.filter((p) => p.repo !== excludeRepo).sort((a, b) => a.label.localeCompare(b.label)),
@@ -190,6 +194,12 @@ export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excl
     (!tokenizerFile || tokenizerValidation.check?.ok === true) &&
     status !== "loading";
 
+  // Sits right under the input form rather than at the bottom of the card: the preset list makes the card nearly viewport-tall, and the pause/stop buttons must never end up below the fold or under the footer disclaimer.
+  const progressBlock =
+    status === "loading" && progress ? (
+      <LoadProgressBar progress={progress} paused={downloadPaused} onPause={onPauseDownload} onResume={onResumeDownload} onStop={onStopDownload} />
+    ) : null;
+
   return (
     <div className={"model-loader" + (embedded ? " embedded" : "")}>
       {!embedded && (
@@ -235,14 +245,15 @@ export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excl
             className="model-loader-form"
             onSubmit={(e) => {
               e.preventDefault();
-              onLoad(repo);
+              onLoad(normalizeRepoId(repo));
             }}
           >
-            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={t("loader.inputPlaceholder")} />
+            <input value={repo} onChange={(e) => setRepo(/^\s*(?:https?:\/\/|(?:www\.)?(?:huggingface|hf)\.co\/)/i.test(e.target.value) ? normalizeRepoId(e.target.value) : e.target.value)} placeholder={t("loader.inputPlaceholder")} />
             <button type="submit" disabled={status === "loading"}>
               {status === "loading" ? t("loader.loading") : t("loader.load")}
             </button>
           </form>
+          {progressBlock}
           <PresetTabs
             groups={[
               { key: "without-moe", title: t("loader.presetsWithoutMoe"), presets: presetsWithoutMoe },
@@ -300,7 +311,7 @@ export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excl
           </button>
         </form>
       )}
-      {status === "loading" && progress && <LoadProgressBar progress={progress} />}
+      {mode === "local" && progressBlock}
       {status === "error" && <div className="model-loader-error">{error}</div>}
     </div>
   );

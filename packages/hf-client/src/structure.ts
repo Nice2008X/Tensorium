@@ -79,6 +79,8 @@ export interface ModelStructure {
   totalBytes: number;
   /** How many distinct safetensors files this checkpoint's weights are split across (1 for an unsharded checkpoint). */
   shardCount: number;
+  /** The file to download for an eager (non-structure-only) load — only meaningful when shardCount is 1: `model.safetensors`, or the lone shard's own name when the checkpoint ships as a single-entry index (e.g. `model-00000-of-00001.safetensors`). */
+  weightsFile: string;
 }
 
 function toWeightIndex(header: Record<string, SafetensorsEntry>): { weightIndex: ModelMetadata["weightIndex"]; bytes: number } {
@@ -109,11 +111,25 @@ function toWeightIndex(header: Record<string, SafetensorsEntry>): { weightIndex:
  * to the console as a failed request — not worth incurring on every single
  * load just to check a case that's rare in practice).
  */
-export async function fetchModelStructure(source: HfSource): Promise<ModelStructure> {
+const structureCache = new Map<string, Promise<ModelStructure>>();
+
+/** Memoized per repo+revision: the loader asks for a checkpoint's size up front (to decide whether to warn) and again when it actually loads it — one set of Range requests should serve both. Failures aren't cached. */
+export function fetchModelStructure(source: HfSource): Promise<ModelStructure> {
+  const key = `${source.repo}@${source.revision ?? "main"}`;
+  let pending = structureCache.get(key);
+  if (!pending) {
+    pending = readModelStructure(source);
+    structureCache.set(key, pending);
+    pending.catch(() => structureCache.delete(key));
+  }
+  return pending;
+}
+
+async function readModelStructure(source: HfSource): Promise<ModelStructure> {
   try {
     const header = await readHeaderOnly(hfResolveUrl(source, "model.safetensors"));
     const { weightIndex, bytes } = toWeightIndex(header);
-    return { weightIndex, totalBytes: bytes, shardCount: 1 };
+    return { weightIndex, totalBytes: bytes, shardCount: 1, weightsFile: "model.safetensors" };
   } catch (err) {
     if (!(err instanceof RangeRequestError) || err.status !== 404) throw err;
   }
@@ -134,5 +150,5 @@ export async function fetchModelStructure(source: HfSource): Promise<ModelStruct
   }
 
   const { weightIndex, bytes } = toWeightIndex(merged);
-  return { weightIndex, totalBytes: bytes, shardCount: shardFiles.length };
+  return { weightIndex, totalBytes: bytes, shardCount: shardFiles.length, weightsFile: shardFiles[0] };
 }

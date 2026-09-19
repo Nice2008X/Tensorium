@@ -15,6 +15,7 @@
     "@tensorium/adapter-gemma4": "*",
     "@tensorium/adapter-generic": "*",
     "@tensorium/adapter-glm4": "*",
+    "@tensorium/adapter-zgcm": "*",
     "@tensorium/adapter-gpt2": "*",
     "@tensorium/adapter-llama": "*",
     "@tensorium/adapter-mistral": "*",

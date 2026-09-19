@@ -1,4 +1,4 @@
-import type { Tensor, TensorSlice } from "@tensorium/model-ir";
+import { readBytes, type Tensor, type TensorSlice, type WeightsBuffer } from "@tensorium/model-ir";
 
 export interface SafetensorsEntry {
   dtype: string;
@@ -10,17 +10,17 @@ export interface SafetensorsFile {
   header: Record<string, SafetensorsEntry>;
   /** Byte offset (within the original ArrayBuffer) where tensor data begins. */
   dataStart: number;
-  buffer: ArrayBuffer;
+  buffer: WeightsBuffer;
 }
 
 /**
  * safetensors layout: [8-byte LE header length][UTF-8 JSON header][raw tensor bytes].
  * Header data_offsets are relative to the byte right after the header.
  */
-export function parseSafetensorsHeader(buffer: ArrayBuffer): SafetensorsFile {
-  const view = new DataView(buffer);
-  const headerLength = Number(view.getBigUint64(0, true));
-  const headerBytes = new Uint8Array(buffer, 8, headerLength);
+export function parseSafetensorsHeader(buffer: WeightsBuffer): SafetensorsFile {
+  const lengthBytes = readBytes(buffer, 0, 8);
+  const headerLength = Number(new DataView(lengthBytes.buffer, lengthBytes.byteOffset, 8).getBigUint64(0, true));
+  const headerBytes = readBytes(buffer, 8, headerLength);
   const headerJson = new TextDecoder("utf-8").decode(headerBytes);
   const raw = JSON.parse(headerJson) as Record<string, SafetensorsEntry | Record<string, unknown>>;
 
@@ -133,8 +133,12 @@ export function readTensor(file: SafetensorsFile, name: string, slice?: TensorSl
   if (!entry) throw new Error(`Unknown tensor: ${name}`);
 
   const { shape, dtype } = entry;
-  const byteOffset = file.dataStart + entry.data_offsets[0];
-  const view = new DataView(file.buffer);
+  // One DataView over just this tensor's bytes: zero-copy for a plain
+  // ArrayBuffer (or a tensor inside one segment), a copy of only this
+  // tensor when it straddles a SegmentedBuffer segment boundary.
+  const byteOffset = 0;
+  const tensorBytes = readBytes(file.buffer, file.dataStart + entry.data_offsets[0], entry.data_offsets[1] - entry.data_offsets[0]);
+  const view = new DataView(tensorBytes.buffer, tensorBytes.byteOffset, tensorBytes.byteLength);
   const strides = rowMajorStrides(shape);
 
   const ranges = shape.map((dimSize, i) => {

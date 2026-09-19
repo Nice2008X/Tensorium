@@ -59,7 +59,11 @@ export async function runInference(
   // Same rule as graph.ts: not every layer of an MoE checkpoint is sparse.
   const isSparseLayer = (i: number) => isMoE && numExperts > 0 && !mlpOnlyLayers.includes(i) && (i + 1) % decoderSparseStep === 0;
   const partialRotaryFactor = Number(cfg.extra.partialRotaryFactor ?? 1);
-  const rotaryDim = Math.round(headDim * partialRotaryFactor);
+  const rotaryDim = Number(cfg.extra.rotaryDim ?? Math.round(headDim * partialRotaryFactor));
+  const preAttentionNormName = String(cfg.extra.preAttentionNormName ?? "input_layernorm");
+  const preFfnNormName = String(cfg.extra.preFfnNormName ?? "post_attention_layernorm");
+  const slidingWindowSizes = (cfg.extra.slidingWindowSizes as (number | null)[] | undefined) ?? [];
+  const attentionGateLayers = (cfg.extra.attentionGateLayers as boolean[] | undefined) ?? [];
   const qDim = numHeads * headDim;
   const kvDim = numKeyValueHeads * headDim;
   const zerosH = new Array(cfg.hiddenSize).fill(0);
@@ -182,7 +186,7 @@ export async function runInference(
     const L = `model.layers.${i}`;
     const blockInput = x;
 
-    const rms1g = await loadNormGamma(`${L}.input_layernorm.weight`);
+    const rms1g = await loadNormGamma(`${L}.${preAttentionNormName}.weight`);
     const rms1Out = record(`${b}.rms1`, applyNorm(x, rms1g));
 
     let qW: Matrix, kW: Matrix, vW: Matrix;
@@ -229,9 +233,27 @@ export async function runInference(
     // against the pre-rope value recorded at `.attn.q` above.
     q = record(`${b}.attn.rope`, q);
 
-    const { output: attnHeadsRaw, attentionWeights: headWeights } = causalSelfAttention(q, k, v, numHeads, numKeyValueHeads, headDim);
-    const attnRaw = applyHeadIntervention(`${b}.attn`, attnHeadsRaw, interventions, headDim);
+    // ZGCM: sliding-attention layers only see the last N tokens; null (every other model, and ZGCM's periodic full-attention layers) means the whole causal prefix.
+    const layerWindow = slidingWindowSizes[i] ?? null;
+    const { output: attnHeadsRaw, attentionWeights: headWeights } = causalSelfAttention(
+      q,
+      k,
+      v,
+      numHeads,
+      numKeyValueHeads,
+      headDim,
+      layerWindow != null ? { slidingWindow: layerWindow } : undefined
+    );
+    let attnRaw = applyHeadIntervention(`${b}.attn`, attnHeadsRaw, interventions, headDim);
     attentionWeights[`${b}.attn`] = headsToTensor(headWeights);
+
+    // ZGCM's attention output gate: sigmoid(g_proj(x)) scales the heads' output elementwise, right before o_proj.
+    if (attentionGateLayers[i] === true) {
+      const gW = await loadMatrix(`${L}.self_attn.g_proj.weight`); // [numHeads*headDim, hidden], out_in
+      const gateRaw = record(`${b}.attn.gate`, linear(rms1Out, gW, null, "out_in"));
+      const gateAct = record(`${b}.attn.gate_act`, applyElementwise(gateRaw, sigmoid));
+      attnRaw = record(`${b}.attn.gated_mul`, mulMatricesElementwise(attnRaw, gateAct));
+    }
 
     const oW = await loadMatrix(`${L}.self_attn.o_proj.weight`);
     const attnOutRaw = linear(attnRaw, oW, null, "out_in");
@@ -253,7 +275,7 @@ export async function runInference(
 
     const res1 = record(`${b}.res1`, addMatrices(attnForResidual, blockInput));
 
-    const rms2g = await loadNormGamma(`${L}.post_attention_layernorm.weight`);
+    const rms2g = await loadNormGamma(`${L}.${preFfnNormName}.weight`);
     const rms2Out = record(`${b}.rms2`, applyNorm(res1, rms2g));
 
     let ffnOut: Matrix;
@@ -312,6 +334,10 @@ export async function runInference(
     attentionWeights,
     logits: matrixToTensor(logits),
   };
+}
+
+function applyElementwise(x: Matrix, fn: (v: number) => number): Matrix {
+  return x.map((row) => row.map(fn));
 }
 
 /** Qwen3's QK-Norm: the same [head_dim] RMSNorm weight applied independently to each head's slice (always the standard RMSNorm formula, never the Gemma (1+weight) variant, regardless of the model's main norm). */

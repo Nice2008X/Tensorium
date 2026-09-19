@@ -33,6 +33,7 @@ import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
 import { Qwen35Adapter } from "@tensorium/adapter-qwen3-5";
 import { GPT2Adapter } from "@tensorium/adapter-gpt2";
 import { Gemma4Adapter } from "@tensorium/adapter-gemma4";
+import { ZgcmAdapter } from "@tensorium/adapter-zgcm";
 import type { Model, ModelAdapter, ModelEdge } from "@tensorium/model-ir";
 import { computeElkLayout, segmentsIntersect, type LayoutPosition, type NodeSize } from "../src/elkLayout.ts";
 import { buildLevel1Graph, buildLevel2Graph, collapseRepeatedChains } from "../src/graphUtils.ts";
@@ -206,6 +207,7 @@ async function main() {
     ["qwen3-5", Qwen35Adapter, "tiny-random/qwen3.5"],
     ["gpt2", GPT2Adapter, "hf-internal-testing/tiny-random-gpt2"],
     ["gemma4", Gemma4Adapter, "google/gemma-4-E2B"],
+    ["zgcm", ZgcmAdapter, "zgcagi/ZGCM-1-7B"],
   ];
 
   let totalNodeOverlaps = 0;

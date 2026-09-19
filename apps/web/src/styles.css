@@ -359,6 +359,19 @@ input, select { font-family: inherit; }
   transition: width 0.15s ease-out;
 }
 /* No known total (Content-Length missing, or a phase with nothing to measure) — an animated sweep so the bar still reads as "in progress" rather than stalled. */
+.load-progress-track.paused .load-progress-fill { animation-play-state: paused; opacity: 0.55; }
+.load-progress-actions { display: flex; gap: 8px; margin-top: 10px; }
+.load-progress-actions button {
+  padding: 5px 12px;
+  background: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.load-progress-actions button:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .load-progress-track.indeterminate .load-progress-fill {
   width: 40%;
   animation: load-progress-sweep 1.1s ease-in-out infinite;
@@ -596,6 +609,26 @@ input, select { font-family: inherit; }
    note (same warning color) rather than the accent color Save Model's
    confirm button uses — this is the riskier, non-default choice, and
    should read that way, not as the dialog's primary action. */
+.large-model-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--bg-chip);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.large-model-option:hover { background: var(--bg-hover); border-color: var(--accent); }
+.large-model-option-title { color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.large-model-option-warning { color: var(--warning); }
 .unknown-model-dialog-confirm {
   padding: 8px 14px;
   border-radius: var(--radius-md);

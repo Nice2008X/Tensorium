@@ -20,7 +20,20 @@ const PHASE_LABEL_KEY: Record<LoadProgress["phase"], TranslationKey> = {
  * in milliseconds with no meaningful fraction to show, so it renders as an
  * indeterminate (animated, no fixed width) bar with just the phase label.
  */
-export function LoadProgressBar({ progress }: { progress: LoadProgress }) {
+export function LoadProgressBar({
+  progress,
+  paused = false,
+  onPause,
+  onResume,
+  onStop,
+}: {
+  progress: LoadProgress;
+  /** Weight-download controls — rendered only for the "weights" phase, and only when handlers are supplied. */
+  paused?: boolean;
+  onPause?: () => void;
+  onResume?: () => void;
+  onStop?: () => void;
+}) {
   const { t } = useTranslation();
   const { phase, loadedBytes, totalBytes } = progress;
   const pct = totalBytes && loadedBytes !== undefined ? Math.min(100, (loadedBytes / totalBytes) * 100) : undefined;
@@ -28,16 +41,28 @@ export function LoadProgressBar({ progress }: { progress: LoadProgress }) {
   return (
     <div className="load-progress">
       <div className="load-progress-label">
-        <span>{t(PHASE_LABEL_KEY[phase])}</span>
+        <span>{paused && phase === "weights" ? t("loader.progress.paused") : t(PHASE_LABEL_KEY[phase])}</span>
         {loadedBytes !== undefined && totalBytes !== undefined && (
           <span className="load-progress-bytes">
             {formatBytes(loadedBytes)} / {formatBytes(totalBytes)}
           </span>
         )}
       </div>
-      <div className={"load-progress-track" + (pct === undefined ? " indeterminate" : "")}>
+      <div className={"load-progress-track" + (pct === undefined ? " indeterminate" : "") + (paused ? " paused" : "")}>
         <div className="load-progress-fill" style={pct === undefined ? undefined : { width: `${pct}%` }} />
       </div>
+      {phase === "weights" && onStop && (
+        <div className="load-progress-actions">
+          {(paused ? onResume : onPause) && (
+            <button type="button" onClick={paused ? onResume : onPause}>
+              {paused ? t("loader.resumeDownload") : t("loader.pauseDownload")}
+            </button>
+          )}
+          <button type="button" onClick={onStop}>
+            {t("loader.stopDownload")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

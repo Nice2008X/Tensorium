@@ -13,6 +13,7 @@ import { Qwen3MoeAdapter } from "@tensorium/adapter-qwen3-moe";
 import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
 import { Gemma4Adapter } from "@tensorium/adapter-gemma4";
 import { Qwen35Adapter } from "@tensorium/adapter-qwen3-5";
+import { ZgcmAdapter } from "@tensorium/adapter-zgcm";
 import { GenericAdapter } from "@tensorium/adapter-generic";
 
 /**
@@ -82,6 +83,7 @@ export const NAMED_ADAPTERS: ModelAdapter[] = [
   DeepseekV2Adapter,
   Gemma4Adapter,
   Qwen35Adapter,
+  ZgcmAdapter,
 ];
 
 export { GenericAdapter };
@@ -116,6 +118,7 @@ export const PRESET_MODELS = [
     isLarge: false,
   },
   { repo: "tiny-random/qwen3.5", label: "Qwen3.5 · tiny-random/qwen3.5 (4 layers, 3 Gated DeltaNet + 1 GQA, gated output)", isMoE: false, isLarge: false },
+  { repo: "openbmb/MiniCPM5-1B", label: "MiniCPM5-1B (real) · Llama arch, 24 layers, GQA 16:2 heads, head_dim 128, 2.16 GB", isMoE: false, isLarge: false },
   // Real, full-size checkpoints — structure-only (see the note above): the
   // architecture graph and every tensor's true shape/dtype are exact, but
   // no real weight bytes are ever downloaded, so a forward pass on these
@@ -141,6 +144,12 @@ export const PRESET_MODELS = [
   {
     repo: "google/gemma-4-E2B",
     label: "Gemma 4 E2B (real, text-only) · 35 layers, sliding+global attention, per-layer embeddings, ~10 GB",
+    isMoE: false,
+    isLarge: true,
+  },
+  {
+    repo: "zgcagi/ZGCM-1-7B",
+    label: "ZGCM-1-7B (real) · 32 layers, sliding-window + gated attention, QK-Norm, partial RoPE, sharded, 14.8 GB",
     isMoE: false,
     isLarge: true,
   },

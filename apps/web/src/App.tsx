@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import type { Model, Tensor } from "@tensorium/model-ir";
-import { totalParameterBytes } from "@tensorium/model-ir";
+import type { Model, Tensor, WeightsBuffer } from "@tensorium/model-ir";
+import { totalParameterBytes, weightsBlobParts } from "@tensorium/model-ir";
 import { useModel } from "./useModel.js";
 import { useInference } from "./useInference.js";
 import { useLocalStorageState } from "./useLocalStorageState.js";
@@ -12,6 +12,7 @@ import { LoadProgressBar } from "./components/LoadProgressBar.js";
 import { LoadModelPanel } from "./components/LoadModelPanel.js";
 import { SaveModelDialog, type SaveModelFile } from "./components/SaveModelDialog.js";
 import { UnknownModelDialog } from "./components/UnknownModelDialog.js";
+import { LargeModelDialog } from "./components/LargeModelDialog.js";
 import { ModelInfoBar } from "./components/ModelInfoBar.js";
 import { ModelTree } from "./components/ModelTree.js";
 import { ArchitectureGraph, type GraphView } from "./components/ArchitectureGraph.js";
@@ -53,8 +54,8 @@ function computeActivationMagnitude(t: Tensor): number {
 }
 
 /** Triggers a browser "Save As" for one file's raw bytes — no server round-trip, just a Blob + an off-DOM `<a download>` click. */
-function downloadBytes(bytes: ArrayBuffer, filename: string) {
-  const url = URL.createObjectURL(new Blob([bytes]));
+function downloadBytes(bytes: WeightsBuffer, filename: string) {
+  const url = URL.createObjectURL(new Blob(weightsBlobParts(bytes)));
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
@@ -73,7 +74,8 @@ function containingBlockId(model: Model, nodeId: string): string | null {
 }
 
 export function App() {
-  const { state, load, loadLocalFiles, reset, restoring, progress, confirmUnknownModel } = useModel();
+  const { state, load, loadLocalFiles, reset, restoring, progress, confirmUnknownModel, confirmWeightsMode, downloadPaused, pauseDownload, resumeDownload, cancelDownload } =
+    useModel();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -200,9 +202,13 @@ export function App() {
           </div>
         ) : (
           <ModelLoader
-            status={state.status === "confirm-unknown" ? "loading" : state.status}
+            status={state.status === "confirm-unknown" || state.status === "confirm-weights" ? "loading" : state.status}
             error={state.error}
             progress={progress}
+            downloadPaused={downloadPaused}
+            onPauseDownload={pauseDownload}
+            onResumeDownload={resumeDownload}
+            onStopDownload={cancelDownload}
             onLoad={load}
             onLoadLocal={loadLocalFiles}
           />
@@ -214,6 +220,7 @@ export function App() {
           onCancel={() => confirmUnknownModel(false)}
           onConfirm={() => confirmUnknownModel(true)}
         />
+        <LargeModelDialog open={state.status === "confirm-weights"} totalBytes={state.pendingWeightsBytes} onChoose={confirmWeightsMode} />
         <div className="app-loader-disclaimer">{t("loader.disclaimer")}</div>
       </div>
     );
