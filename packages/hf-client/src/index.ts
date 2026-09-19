@@ -1,7 +1,7 @@
-import type { LoadProgress, ModelMetadata, ModelSource } from "@tensorium/model-ir";
+import { DownloadCancelledError, type LoadProgress, type ModelMetadata, type ModelSource, type WeightsBuffer } from "@tensorium/model-ir";
 import { parseSafetensorsHeader } from "@tensorium/tensor-core";
-import { fetchCachedArrayBuffer, type ByteProgressCallback } from "./modelCache.js";
-import { fetchModelStructure } from "./structure.js";
+import { fetchCachedArrayBuffer, fetchCachedWeights, type ByteProgressCallback } from "./modelCache.js";
+import { fetchModelStructure, type ModelStructure } from "./structure.js";
 
 export { MAX_CACHEABLE_BYTES } from "./modelCache.js";
 export type { ByteProgressCallback } from "./modelCache.js";
@@ -14,12 +14,23 @@ export type { ModelStructure } from "./structure.js";
  * `structureOnly: true` instead — the architecture graph is built from real
  * shapes/dtypes either way (see fetchModelStructure), but a WeightProvider
  * over a checkpoint this large has to fabricate its tensor values rather
- * than read real ones (see tensor-core's SyntheticWeightProvider). 3 GB
- * comfortably covers this app's real hand-typed presets while keeping any
- * checkpoint in the multi-GB range from ever hitting a real multi-gigabyte
- * `fetch()` in a browser tab.
+ * than read real ones (see tensor-core's SyntheticWeightProvider).
+ *
+ * A single ArrayBuffer tops out around 2 GiB in a browser (Chromium 153:
+ * 2040 MiB allocates, 2046 MiB throws regardless of free RAM), so anything
+ * bigger is held as a SegmentedBuffer of 512 MiB pieces instead — this
+ * ceiling is now just a sanity bound on total tab memory, not an
+ * allocation limit.
  */
 export const STRUCTURE_ONLY_THRESHOLD_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB
+
+/** Checkpoints above this size get a "download the weights or structure only?" prompt before anything heavy is fetched. */
+export const LARGE_MODEL_WARNING_BYTES = 1024 ** 3; // 1 GB
+
+/** Whether this app can eagerly download a checkpoint's weights at all: only a single file, and only below STRUCTURE_ONLY_THRESHOLD_BYTES. Anything else is structure-only regardless of what the user would prefer. */
+export function canDownloadWeights(structure: ModelStructure): boolean {
+  return structure.shardCount <= 1 && structure.totalBytes <= STRUCTURE_ONLY_THRESHOLD_BYTES;
+}
 
 export function hfResolveUrl(source: Extract<ModelSource, { kind: "huggingface" }>, file: string): string {
   const revision = source.revision ?? "main";
@@ -63,7 +74,7 @@ export interface RawSafetensorsMetadata<TConfig> {
   rawConfig: TConfig;
   weightIndex: ModelMetadata["weightIndex"];
   /** Absent exactly when structureOnly is true — no tensor bytes were ever downloaded, real or otherwise. */
-  weightsBuffer?: ArrayBuffer;
+  weightsBuffer?: WeightsBuffer;
   /** See ModelMetadata.structureOnly — an adapter's getWeightProvider() must check this and hand back a SyntheticWeightProvider instead of a SafetensorsWeightProvider when it's true. */
   structureOnly: boolean;
 }
@@ -112,12 +123,15 @@ export async function loadSafetensorsMetadata<TConfig>(
 
   onProgress?.({ phase: "structure" });
   const structure = await fetchModelStructure(source);
-  if (structure.shardCount > 1 || structure.totalBytes > STRUCTURE_ONLY_THRESHOLD_BYTES) {
+  if (source.weightsMode === "structure-only" || !canDownloadWeights(structure)) {
     return { rawConfig, weightIndex: structure.weightIndex, structureOnly: true };
   }
 
-  const weightsBuffer = await fetchArrayBuffer(hfResolveUrl(source, "model.safetensors"), (loadedBytes, totalBytes) =>
-    onProgress?.({ phase: "weights", loadedBytes, totalBytes })
+  if (source.download?.cancelled) throw new DownloadCancelledError();
+  const weightsBuffer = await fetchCachedWeights(
+    hfResolveUrl(source, structure.weightsFile),
+    (loadedBytes, totalBytes) => onProgress?.({ phase: "weights", loadedBytes, totalBytes }),
+    source.download
   );
   onProgress?.({ phase: "parsing" });
   const weightIndex = headerToWeightIndex(parseSafetensorsHeader(weightsBuffer).header);

@@ -151,8 +151,146 @@ export interface WeightProvider {
 // architecture. Everything above and everything in the UI stays fixed.
 // ---------------------------------------------------------------------------
 
+/** Size of each backing ArrayBuffer in a SegmentedBuffer — well under the ~2 GiB a browser will allocate as one ArrayBuffer, and small enough that many of them fit despite address-space fragmentation. */
+export const SEGMENT_BYTES = 512 * 1024 * 1024;
+
+/**
+ * A byte store larger than one ArrayBuffer can be: the same bytes, split
+ * across fixed-size ArrayBuffer segments (every one SEGMENT_BYTES except a
+ * possibly-shorter last). Browsers refuse to allocate a single ArrayBuffer
+ * past ~2 GiB, so a checkpoint bigger than that has to live in several.
+ * read() hands back a zero-copy view whenever the requested range sits inside
+ * one segment and copies only when it straddles a boundary.
+ */
+export class SegmentedBuffer {
+  readonly segments: ArrayBuffer[] = [];
+
+  constructor(
+    readonly byteLength: number,
+    readonly segmentBytes: number = SEGMENT_BYTES
+  ) {
+    for (let offset = 0; offset < byteLength; offset += segmentBytes) {
+      this.segments.push(new ArrayBuffer(Math.min(segmentBytes, byteLength - offset)));
+    }
+  }
+
+  write(offset: number, chunk: Uint8Array): void {
+    let done = 0;
+    while (done < chunk.byteLength) {
+      const at = offset + done;
+      const index = Math.floor(at / this.segmentBytes);
+      const inner = at - index * this.segmentBytes;
+      const segment = new Uint8Array(this.segments[index]);
+      const n = Math.min(chunk.byteLength - done, segment.byteLength - inner);
+      segment.set(chunk.subarray(done, done + n), inner);
+      done += n;
+    }
+  }
+
+  read(start: number, length: number): Uint8Array {
+    if (start < 0 || length < 0 || start + length > this.byteLength) {
+      throw new RangeError(`Read of ${length} bytes at ${start} is outside this ${this.byteLength}-byte buffer`);
+    }
+    const index = Math.floor(start / this.segmentBytes);
+    const inner = start - index * this.segmentBytes;
+    if (inner + length <= this.segments[index].byteLength) return new Uint8Array(this.segments[index], inner, length);
+
+    const out = new Uint8Array(length);
+    let done = 0;
+    while (done < length) {
+      const at = start + done;
+      const i = Math.floor(at / this.segmentBytes);
+      const segInner = at - i * this.segmentBytes;
+      const n = Math.min(length - done, this.segments[i].byteLength - segInner);
+      out.set(new Uint8Array(this.segments[i], segInner, n), done);
+      done += n;
+    }
+    return out;
+  }
+}
+
+/** Weight bytes as held in memory: one ArrayBuffer when the file fits in one, a SegmentedBuffer when it doesn't. */
+export type WeightsBuffer = ArrayBuffer | SegmentedBuffer;
+
+/** `length` bytes at `start` — a zero-copy view unless a SegmentedBuffer read straddles a segment boundary. Never write through the result. */
+export function readBytes(buffer: WeightsBuffer, start: number, length: number): Uint8Array {
+  return buffer instanceof SegmentedBuffer ? buffer.read(start, length) : new Uint8Array(buffer, start, length);
+}
+
+/** The pieces to hand `new Blob([...])` to save these bytes back out as one file. */
+export function weightsBlobParts(buffer: WeightsBuffer): ArrayBuffer[] {
+  return buffer instanceof SegmentedBuffer ? buffer.segments : [buffer];
+}
+
+/** What to do with a Hugging Face checkpoint's tensor bytes: fetch them for real, or read only the header (real shapes/dtypes, synthetic values). Left unset, the loader decides by size alone. */
+export type WeightsMode = "download" | "structure-only";
+
+export class DownloadCancelledError extends Error {
+  constructor() {
+    super("Download cancelled");
+    this.name = "DownloadCancelledError";
+  }
+}
+
+/**
+ * Lets the UI pause, resume, or cancel one in-flight weight download. Pause
+ * aborts the underlying HTTP request but keeps the bytes already received;
+ * the downloader waits in waitUntilRunning() and then re-requests only the
+ * remainder with a Range header, so a pause costs nothing but one extra
+ * round-trip on resume.
+ */
+export class DownloadControl {
+  private state: "running" | "paused" | "cancelled" = "running";
+  private inflight: AbortController | null = null;
+  private waiters: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
+
+  get paused(): boolean {
+    return this.state === "paused";
+  }
+  get cancelled(): boolean {
+    return this.state === "cancelled";
+  }
+
+  /** Downloader-side: registers the request that pause()/cancel() should interrupt. Aborts immediately if a pause/cancel already landed. */
+  attach(controller: AbortController): void {
+    this.inflight = controller;
+    if (this.state !== "running") controller.abort();
+  }
+  detach(controller: AbortController): void {
+    if (this.inflight === controller) this.inflight = null;
+  }
+
+  /** Downloader-side: resolves immediately while running, waits while paused, throws DownloadCancelledError once cancelled. */
+  waitUntilRunning(): Promise<void> {
+    if (this.state === "running") return Promise.resolve();
+    if (this.state === "cancelled") return Promise.reject(new DownloadCancelledError());
+    return new Promise((resolve, reject) => this.waiters.push({ resolve, reject }));
+  }
+
+  pause(): void {
+    if (this.state !== "running") return;
+    this.state = "paused";
+    this.inflight?.abort();
+  }
+  resume(): void {
+    if (this.state !== "paused") return;
+    this.state = "running";
+    const waiters = this.waiters;
+    this.waiters = [];
+    for (const w of waiters) w.resolve();
+  }
+  cancel(): void {
+    if (this.state === "cancelled") return;
+    this.state = "cancelled";
+    this.inflight?.abort();
+    const waiters = this.waiters;
+    this.waiters = [];
+    for (const w of waiters) w.reject(new DownloadCancelledError());
+  }
+}
+
 export type ModelSource =
-  | { kind: "huggingface"; repo: string; revision?: string }
+  | { kind: "huggingface"; repo: string; revision?: string; weightsMode?: WeightsMode; download?: DownloadControl }
   | { kind: "local"; name: string; files: Record<string, ArrayBuffer> };
 
 /** A human-readable label for a source — the HF repo id, or the display name chosen when the local files were picked. */
@@ -167,7 +305,7 @@ export interface ModelMetadata {
   weightIndex: Record<string, { shape: number[]; dtype: string }>;
   source: ModelSource;
   /** Raw bytes backing the WeightProvider this metadata will build, if already fetched. */
-  weightsBuffer?: ArrayBuffer;
+  weightsBuffer?: WeightsBuffer;
   /**
    * Set when this checkpoint's real weight bytes were deliberately never
    * downloaded — either because the checkpoint is too large (see

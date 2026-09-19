@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LoadProgress, Model, ModelAdapter, ModelMetadata, ModelSource, WeightProvider } from "@tensorium/model-ir";
-import { fetchArrayBuffer, hfResolveUrl, peekModelType, type HfConfigPreview } from "@tensorium/hf-client";
+import { DownloadCancelledError, DownloadControl, type LoadProgress, type Model, type ModelAdapter, type ModelMetadata, type ModelSource, type WeightProvider, type WeightsBuffer, type WeightsMode } from "@tensorium/model-ir";
+import { canDownloadWeights, fetchArrayBuffer, fetchModelStructure, hfResolveUrl, LARGE_MODEL_WARNING_BYTES, peekModelType, type HfConfigPreview } from "@tensorium/hf-client";
 import { loadTokenizer, type Tokenizer } from "@tensorium/tokenizer";
 import { NAMED_ADAPTERS, GenericAdapter } from "./adapters.js";
 import { normalizeRepoId } from "./format.js";
@@ -36,12 +36,12 @@ function writePersistedRepo(repo: string | null) {
 /** The exact bytes of each source file, kept around purely so "save model to disk" can hand the user back byte-identical files rather than re-serializing anything. */
 export interface ModelRawFiles {
   configBytes?: ArrayBuffer;
-  weightsBytes?: ArrayBuffer;
+  weightsBytes?: WeightsBuffer;
   tokenizerBytes?: ArrayBuffer;
 }
 
 export interface ModelState {
-  status: "idle" | "loading" | "confirm-unknown" | "ready" | "error";
+  status: "idle" | "loading" | "confirm-unknown" | "confirm-weights" | "ready" | "error";
   error?: string;
   model?: Model;
   metadata?: ModelMetadata;
@@ -54,6 +54,8 @@ export interface ModelState {
   /** Set only during "confirm-unknown": the source/preview waiting on the user's yes/no in UnknownModelDialog before GenericAdapter ever touches it. */
   pendingSource?: ModelSource;
   pendingPreview?: HfConfigPreview;
+  /** Set only during "confirm-weights": the checkpoint's real total weight size, shown in the download-or-structure-only prompt. */
+  pendingWeightsBytes?: number;
 }
 
 /** config.json/tokenizer.json are small — a Hugging Face source hits the IndexedDB cache (already populated by loadMetadata/loadTokenizer above, so this is free) and a local source just reads the file it already has in memory. Missing/failed reads (e.g. no tokenizer.json) resolve to undefined rather than failing the whole load. */
@@ -79,6 +81,9 @@ export function useModel() {
   // them once the restored model lands.
   const [restoring, setRestoring] = useState<boolean>(() => !!readPersistedRepo());
   const [progress, setProgress] = useState<LoadProgress | undefined>(undefined);
+  // The control for whichever weight download is currently in flight (if any), so the UI's pause/resume/stop buttons have something to act on.
+  const downloadRef = useRef<DownloadControl | undefined>(undefined);
+  const [downloadPaused, setDownloadPaused] = useState(false);
 
   // The actual fetch-metadata/build-graph/load-tokenizer sequence, once an
   // adapter has already been decided — shared by the normal (named-adapter)
@@ -86,6 +91,7 @@ export function useModel() {
   // there's exactly one place that knows how to turn "a source + an
   // adapter" into a ready model.
   const loadWithAdapter = useCallback(async (source: ModelSource, adapter: ModelAdapter) => {
+    downloadRef.current = source.kind === "huggingface" ? source.download : undefined;
     setState({ status: "loading" });
     setProgress({ phase: "config" });
     try {
@@ -117,8 +123,13 @@ export function useModel() {
       setState({ status: "ready", model, metadata, weightProvider, adapter, source, tokenizer, rawFiles });
       setProgress(undefined);
     } catch (err) {
-      setState({ status: "error", error: err instanceof Error ? err.message : String(err) });
+      // Stopping a download is the user's own choice, not a failure — drop back to the loader quietly.
+      if (err instanceof DownloadCancelledError) setState({ status: "idle" });
+      else setState({ status: "error", error: err instanceof Error ? err.message : String(err) });
       setProgress(undefined);
+    } finally {
+      downloadRef.current = undefined;
+      setDownloadPaused(false);
     }
   }, []);
 
@@ -127,6 +138,22 @@ export function useModel() {
       setState({ status: "loading" });
       setProgress({ phase: "config" });
       try {
+        // A big checkpoint gets an explicit "download weights or structure
+        // only?" choice before anything heavy is fetched. Only the cheap
+        // Range-request size probe runs here (memoized, so loading the
+        // model afterwards reuses it). If the probe itself fails, carry on:
+        // the real load below will hit — and report — the same problem.
+        if (source.kind === "huggingface" && source.weightsMode === undefined) {
+          setProgress({ phase: "structure" });
+          const structure = await fetchModelStructure(source).catch(() => undefined);
+          if (structure && structure.totalBytes > LARGE_MODEL_WARNING_BYTES && canDownloadWeights(structure)) {
+            setProgress(undefined);
+            setState({ status: "confirm-weights", pendingSource: source, pendingWeightsBytes: structure.totalBytes });
+            return;
+          }
+          setProgress({ phase: "config" });
+        }
+
         // Read just enough of config.json to know what kind of model this
         // is, *before* any adapter commits to fetching (and possibly
         // misreading) its weights. Named adapters are tried first, in the
@@ -173,6 +200,29 @@ export function useModel() {
     },
     [state, loadWithAdapter]
   );
+
+  // The user's answer to LargeModelDialog: null (cancel / Escape / backdrop) drops back to the loader with nothing loaded.
+  const confirmWeightsMode = useCallback(
+    (mode: WeightsMode | null) => {
+      if (state.status !== "confirm-weights" || !state.pendingSource || state.pendingSource.kind !== "huggingface") return;
+      if (!mode) {
+        setState({ status: "idle" });
+        return;
+      }
+      loadFromSource({ ...state.pendingSource, weightsMode: mode, download: mode === "download" ? new DownloadControl() : undefined });
+    },
+    [state, loadFromSource]
+  );
+
+  const pauseDownload = useCallback(() => {
+    downloadRef.current?.pause();
+    setDownloadPaused(true);
+  }, []);
+  const resumeDownload = useCallback(() => {
+    downloadRef.current?.resume();
+    setDownloadPaused(false);
+  }, []);
+  const cancelDownload = useCallback(() => downloadRef.current?.cancel(), []);
 
   const load = useCallback((repo: string) => loadFromSource({ kind: "huggingface", repo: normalizeRepoId(repo) }), [loadFromSource]);
 
@@ -226,5 +276,5 @@ export function useModel() {
     loadFromSource({ kind: "huggingface", repo }).finally(() => setRestoring(false));
   }, [loadFromSource]);
 
-  return { state, load, loadLocalFiles, reset, restoring, progress, confirmUnknownModel };
+  return { state, load, loadLocalFiles, reset, restoring, progress, confirmUnknownModel, confirmWeightsMode, downloadPaused, pauseDownload, resumeDownload, cancelDownload };
 }

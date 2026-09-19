@@ -1,4 +1,4 @@
-import type { ParameterRef, Tensor, TensorSlice, WeightProvider } from "@tensorium/model-ir";
+import type { ParameterRef, Tensor, TensorSlice, WeightProvider, WeightsBuffer } from "@tensorium/model-ir";
 import { dtypeSize, numElements } from "@tensorium/model-ir";
 import { parseSafetensorsHeader, readTensor, type SafetensorsFile } from "./safetensors.js";
 
@@ -27,7 +27,7 @@ export class SafetensorsWeightProvider implements WeightProvider {
   private file: SafetensorsFile;
   private tensorCache = new Map<string, Tensor>();
 
-  constructor(id: string, buffer: ArrayBuffer) {
+  constructor(id: string, buffer: WeightsBuffer) {
     this.id = id;
     this.file = parseSafetensorsHeader(buffer);
   }
