@@ -3,6 +3,7 @@ import type { LoadProgress, Model, ModelAdapter, ModelMetadata, ModelSource, Wei
 import { fetchArrayBuffer, hfResolveUrl, peekModelType, type HfConfigPreview } from "@tensorium/hf-client";
 import { loadTokenizer, type Tokenizer } from "@tensorium/tokenizer";
 import { NAMED_ADAPTERS, GenericAdapter } from "./adapters.js";
+import { normalizeRepoId } from "./format.js";
 
 /**
  * Remembers the last Hugging-Face-sourced model across a page reload, so
@@ -173,7 +174,7 @@ export function useModel() {
     [state, loadWithAdapter]
   );
 
-  const load = useCallback((repo: string) => loadFromSource({ kind: "huggingface", repo: repo.trim() }), [loadFromSource]);
+  const load = useCallback((repo: string) => loadFromSource({ kind: "huggingface", repo: normalizeRepoId(repo) }), [loadFromSource]);
 
   const loadLocalFiles = useCallback(
     async (files: { name: string; config: File; weights: File; tokenizer?: File }) => {

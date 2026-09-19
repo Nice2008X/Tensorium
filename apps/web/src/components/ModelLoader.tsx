@@ -3,7 +3,7 @@ import type { LoadProgress } from "@tensorium/model-ir";
 import { PRESET_MODELS } from "../adapters.js";
 import { useTranslation } from "./LanguageContext.js";
 import { checkJsonFile, checkWeightsFile, type FileCheck } from "../localFileValidation.js";
-import { formatBytes } from "../format.js";
+import { formatBytes, normalizeRepoId } from "../format.js";
 import { LoadProgressBar } from "./LoadProgressBar.js";
 
 export interface LocalModelFiles {
@@ -235,10 +235,10 @@ export function ModelLoader({ status, error, progress, onLoad, onLoadLocal, excl
             className="model-loader-form"
             onSubmit={(e) => {
               e.preventDefault();
-              onLoad(repo);
+              onLoad(normalizeRepoId(repo));
             }}
           >
-            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={t("loader.inputPlaceholder")} />
+            <input value={repo} onChange={(e) => setRepo(/^\s*(?:https?:\/\/|(?:www\.)?(?:huggingface|hf)\.co\/)/i.test(e.target.value) ? normalizeRepoId(e.target.value) : e.target.value)} placeholder={t("loader.inputPlaceholder")} />
             <button type="submit" disabled={status === "loading"}>
               {status === "loading" ? t("loader.loading") : t("loader.load")}
             </button>
