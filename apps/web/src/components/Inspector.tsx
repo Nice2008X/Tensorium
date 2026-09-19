@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import type { ActivationCapture, Model, ModelNode } from "@tensorium/model-ir";
 import { totalParameterCount } from "@tensorium/model-ir";
 import type { Tokenizer } from "@tensorium/tokenizer";
-import { componentRegistry } from "../registry.js";
-import { topKFromLogits } from "../logits.js";
+import { classifierNodeInfo, componentRegistry } from "../registry.js";
+import { outputTokenLabel, topKFromLogits } from "../logits.js";
 import { formatBytes, formatCount, formatPercent } from "../format.js";
 import { useLocalStorageState } from "../useLocalStorageState.js";
 import { describeInputConstruction } from "../nodeInputs.js";
@@ -62,7 +62,7 @@ export function Inspector({
     );
   }
 
-  const info = componentRegistry[node.type];
+  const info = (model.config.classLabels && classifierNodeInfo[node.type]) || componentRegistry[node.type];
   const totalParams = node.parameters.reduce((a, p) => a + (p.slice ? p.logicalShape.reduce((x, y) => x * y, 1) : p.numElements), 0);
   const hasThisRun = activationShape !== undefined && activationMagnitude !== undefined;
   const { sources: inputSources, operator: inputOperator } = describeInputConstruction(model, node, t);
@@ -350,7 +350,7 @@ function ModelSummarySections({ model, inferenceResult, tokenizer, elapsedMs }: 
               <div className="io-row">
                 <span className="io-label">{t("inspector.topPrediction")}</span>
                 <span className="io-shape">
-                  {tokenizer.decodeToken(topPrediction.tokenId).trim() || `#${topPrediction.tokenId}`} · {formatPercent(topPrediction.prob)}
+                  {outputTokenLabel(tokenizer, model.config.classLabels, topPrediction.tokenId).trim() || `#${topPrediction.tokenId}`} · {formatPercent(topPrediction.prob)}
                 </span>
               </div>
             )}

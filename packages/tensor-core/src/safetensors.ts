@@ -13,24 +13,90 @@ export interface SafetensorsFile {
   buffer: WeightsBuffer;
 }
 
+/** Same ceiling the reference safetensors implementation enforces — a header claiming more is corrupt or hostile, and would otherwise be read into memory whole. */
+export const MAX_SAFETENSORS_HEADER_BYTES = 100_000_000;
+const MAX_TENSOR_RANK = 16;
+const MAX_TENSOR_NAME_LENGTH = 4096;
+const DTYPE_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+/** Element sizes for the dtypes whose `data_offsets` span can be cross-checked against `shape`; an unrecognized dtype is still accepted (structure-only viewing works for any), just not size-checked. */
+const KNOWN_DTYPE_BYTES: Record<string, number> = {
+  F64: 8, I64: 8, U64: 8, F32: 4, I32: 4, U32: 4, F16: 2, BF16: 2, I16: 2, U16: 2, I8: 1, U8: 1, BOOL: 1, F8_E4M3: 1, F8_E5M2: 1,
+};
+
+/** Reads the 8-byte little-endian header length and rejects an absurd one *before* anything tries to allocate or fetch that many bytes. */
+export function readSafetensorsHeaderLength(prefix: Uint8Array): number {
+  if (prefix.byteLength < 8) throw new Error("Not a safetensors file: shorter than its 8-byte header-length prefix.");
+  const length = new DataView(prefix.buffer, prefix.byteOffset, 8).getBigUint64(0, true);
+  if (length < 2n || length > BigInt(MAX_SAFETENSORS_HEADER_BYTES)) {
+    throw new Error(`Not a valid safetensors file: its header claims ${length} bytes (expected 2 to ${MAX_SAFETENSORS_HEADER_BYTES}).`);
+  }
+  return Number(length);
+}
+
 /**
- * safetensors layout: [8-byte LE header length][UTF-8 JSON header][raw tensor bytes].
- * Header data_offsets are relative to the byte right after the header.
+ * Decodes and strictly validates a safetensors JSON header — the only
+ * gatekeeper between an untrusted file (a local upload or any Hugging Face
+ * repo's checkpoint) and every consumer of tensor names/shapes/offsets.
+ * Rejects anything that isn't a plain object of well-formed entries, a
+ * `__proto__` tensor name (assigning it would swap the header's prototype
+ * instead of adding an entry), non-integer/negative/oversized shapes,
+ * offsets that don't match the shape's byte size or run past the data
+ * region, and non-UTF-8 text. `dataLength` is the size of the tensor-data
+ * region when the whole file is known; omit it when only the header itself
+ * was fetched.
  */
-export function parseSafetensorsHeader(buffer: WeightsBuffer): SafetensorsFile {
-  const lengthBytes = readBytes(buffer, 0, 8);
-  const headerLength = Number(new DataView(lengthBytes.buffer, lengthBytes.byteOffset, 8).getBigUint64(0, true));
-  const headerBytes = readBytes(buffer, 8, headerLength);
-  const headerJson = new TextDecoder("utf-8").decode(headerBytes);
-  const raw = JSON.parse(headerJson) as Record<string, SafetensorsEntry | Record<string, unknown>>;
+export function decodeSafetensorsHeader(headerBytes: Uint8Array, dataLength?: number): Record<string, SafetensorsEntry> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(headerBytes));
+  } catch {
+    throw new Error("Not a valid safetensors file: its header isn't valid UTF-8 JSON.");
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("Not a valid safetensors file: its header isn't a JSON object.");
 
   const header: Record<string, SafetensorsEntry> = {};
   for (const [name, entry] of Object.entries(raw)) {
     if (name === "__metadata__") continue;
-    header[name] = entry as SafetensorsEntry;
-  }
+    const fail = (why: string): never => {
+      throw new Error(`Invalid safetensors header: tensor "${name.slice(0, 80)}" ${why}.`);
+    };
+    if (name === "__proto__" || name.length === 0 || name.length > MAX_TENSOR_NAME_LENGTH || CONTROL_CHARS.test(name)) fail("has an unacceptable name");
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) fail("isn't an object");
+    const { dtype, shape, data_offsets: offsets } = entry as Record<string, unknown>;
+    if (typeof dtype !== "string" || !DTYPE_PATTERN.test(dtype)) fail("has a malformed dtype");
+    if (!Array.isArray(shape) || shape.length > MAX_TENSOR_RANK || !shape.every((d) => Number.isSafeInteger(d) && d >= 0)) fail("has a malformed shape");
+    if (!Array.isArray(offsets) || offsets.length !== 2 || !offsets.every((o) => Number.isSafeInteger(o) && o >= 0) || offsets[0] > offsets[1]) fail("has malformed data_offsets");
 
-  return { header, dataStart: 8 + headerLength, buffer };
+    const dims = shape as number[];
+    const [begin, end] = offsets as [number, number];
+    let elements = 1;
+    for (const d of dims) {
+      elements *= d;
+      if (!Number.isSafeInteger(elements)) fail("has an overflowing shape");
+    }
+    const elementBytes = KNOWN_DTYPE_BYTES[dtype as string];
+    if (elementBytes !== undefined && end - begin !== elements * elementBytes) fail("has data_offsets that don't match its shape and dtype");
+    if (dataLength !== undefined && end > dataLength) fail("points past the end of the file");
+    header[name] = { dtype: dtype as string, shape: dims, data_offsets: [begin, end] };
+  }
+  return header;
+}
+
+/**
+ * safetensors layout: [8-byte LE header length][UTF-8 JSON header][raw tensor bytes].
+ * Header data_offsets are relative to the byte right after the header.
+ * Pass `headerOnly` when `buffer` holds just the header (a structure-only
+ * Range fetch), so tensor offsets aren't bounds-checked against bytes that
+ * were deliberately never downloaded.
+ */
+export function parseSafetensorsHeader(buffer: WeightsBuffer, options: { headerOnly?: boolean } = {}): SafetensorsFile {
+  const headerLength = readSafetensorsHeaderLength(readBytes(buffer, 0, Math.min(8, buffer.byteLength)));
+  if (8 + headerLength > buffer.byteLength) throw new Error("Not a valid safetensors file: it ends before its header does (truncated).");
+  const dataStart = 8 + headerLength;
+  const header = decodeSafetensorsHeader(readBytes(buffer, 8, headerLength), options.headerOnly ? undefined : buffer.byteLength - dataStart);
+  return { header, dataStart, buffer };
 }
 
 function bytesPerElement(dtype: string): number {

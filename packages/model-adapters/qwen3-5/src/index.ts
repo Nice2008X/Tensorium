@@ -16,6 +16,11 @@ export { type Qwen35RawConfig } from "./graph.js";
 // lm_head.weight) — model.visual.*/mtp.* stay present in weightIndex but
 // are never referenced by any node this adapter creates.
 //
+// A `Qwen3_5ForSequenceClassification` checkpoint (e.g. the Jev-style
+// AlexWortega/openjev) is the same decoder with `score.weight` (a bias-free
+// Linear to the class labels) in place of the LM head — buildGraph reads
+// `id2label` and builds that head instead; see graph.ts.
+//
 // The decoder itself is a genuinely new attention mechanism for this app:
 // every layer is either ordinary causal GQA ("full_attention", periodic)
 // or a linear/recurrent Gated DeltaNet layer ("linear_attention", most

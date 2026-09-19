@@ -1,7 +1,8 @@
 import type { ModelMetadata, ModelSource } from "@tensorium/model-ir";
 import { dtypeSize, numElements } from "@tensorium/model-ir";
-import { parseSafetensorsHeader, type SafetensorsEntry } from "@tensorium/tensor-core";
-import { hfResolveUrl } from "./index.js";
+import { parseSafetensorsHeader, readSafetensorsHeaderLength, type SafetensorsEntry } from "@tensorium/tensor-core";
+import { hfResolveUrl, MAX_INDEX_BYTES } from "./index.js";
+import { fetchCachedArrayBuffer } from "./modelCache.js";
 
 type HfSource = Extract<ModelSource, { kind: "huggingface" }>;
 
@@ -56,7 +57,8 @@ async function fetchByteRange(url: string, start: number, end: number): Promise<
  */
 async function readHeaderOnly(url: string): Promise<Record<string, SafetensorsEntry>> {
   const speculative = await fetchByteRange(url, 0, SPECULATIVE_HEADER_BYTES - 1);
-  const headerLength = Number(new DataView(speculative).getBigUint64(0, true));
+  // Validates the length before any second request is sized off it.
+  const headerLength = readSafetensorsHeaderLength(new Uint8Array(speculative, 0, Math.min(8, speculative.byteLength)));
   const totalNeeded = 8 + headerLength;
 
   const headerBuffer = totalNeeded <= speculative.byteLength ? speculative : await fetchByteRange(url, 0, totalNeeded - 1);
@@ -64,7 +66,7 @@ async function readHeaderOnly(url: string): Promise<Record<string, SafetensorsEn
   // parseSafetensorsHeader only ever reads bytes [0, 8+headerLength) — it's
   // safe to hand it a buffer that stops exactly there, with no tensor data
   // behind it, as long as nothing downstream tries to readTensor() from it.
-  return parseSafetensorsHeader(headerBuffer).header;
+  return parseSafetensorsHeader(headerBuffer, { headerOnly: true }).header;
 }
 
 /** name -> filename, from a sharded checkpoint's model.safetensors.index.json. */
@@ -136,12 +138,22 @@ async function readModelStructure(source: HfSource): Promise<ModelStructure> {
 
   // No single model.safetensors — fall back to the sharded layout.
   const indexUrl = hfResolveUrl(source, "model.safetensors.index.json");
-  const indexRes = await fetch(indexUrl);
-  if (!indexRes.ok) {
+  let index: SafetensorsIndexJson;
+  try {
+    index = JSON.parse(new TextDecoder().decode(await fetchCachedArrayBuffer(indexUrl, undefined, undefined, MAX_INDEX_BYTES)));
+  } catch {
     throw new Error(`Could not find model.safetensors or model.safetensors.index.json for ${source.repo} — this checkpoint's weight layout isn't one this app recognizes.`);
   }
-  const index = (await indexRes.json()) as SafetensorsIndexJson;
-  const shardFiles = [...new Set(Object.values(index.weight_map))];
+  const weightMap = index?.weight_map;
+  if (typeof weightMap !== "object" || weightMap === null || Array.isArray(weightMap)) {
+    throw new Error(`${source.repo}'s model.safetensors.index.json has no valid weight_map.`);
+  }
+  // Shard names go straight into request URLs, so each must be a plain
+  // `*.safetensors` file name; hfResolveUrl re-checks it as a path segment too.
+  const shardFiles = [...new Set(Object.values(weightMap))];
+  if (shardFiles.length === 0 || shardFiles.length > 2048 || !shardFiles.every((f) => typeof f === "string" && /\.safetensors$/i.test(f))) {
+    throw new Error(`${source.repo}'s model.safetensors.index.json lists shard files this app won't fetch (expected up to 2048 names ending in .safetensors).`);
+  }
 
   const merged: Record<string, SafetensorsEntry> = {};
   for (const file of shardFiles) {

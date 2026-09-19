@@ -282,7 +282,7 @@ export function ModelLoader({ status, error, progress, downloadPaused, onPauseDo
             <input
               type="file"
               accept=".json"
-              onChange={(e) => pickFile(e.target.files?.[0] ?? null, setConfigFile, setConfigValidation, configNonce, checkJsonFile)}
+              onChange={(e) => pickFile(e.target.files?.[0] ?? null, setConfigFile, setConfigValidation, configNonce, (f) => checkJsonFile(f, "config"))}
             />
             <FileRowStatus file={configFile} validation={configValidation} />
           </label>
@@ -302,7 +302,7 @@ export function ModelLoader({ status, error, progress, downloadPaused, onPauseDo
             <input
               type="file"
               accept=".json"
-              onChange={(e) => pickFile(e.target.files?.[0] ?? null, setTokenizerFile, setTokenizerValidation, tokenizerNonce, checkJsonFile)}
+              onChange={(e) => pickFile(e.target.files?.[0] ?? null, setTokenizerFile, setTokenizerValidation, tokenizerNonce, (f) => checkJsonFile(f, "tokenizer"))}
             />
             <FileRowStatus file={tokenizerFile} validation={tokenizerValidation} />
           </label>

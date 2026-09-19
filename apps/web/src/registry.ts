@@ -209,3 +209,19 @@ export const componentRegistry: Record<NodeType, NodeTypeInfo> = {
     category: "structural",
   },
 };
+
+/** Replacements for the `lm_head` / `output` entries above on a sequence-classification model (ModelConfig.classLabels set), whose head scores a handful of classes instead of a vocabulary. */
+export const classifierNodeInfo: Partial<Record<NodeType, NodeTypeInfo>> = {
+  lm_head: {
+    ...componentRegistry.lm_head,
+    label: "Classifier Head",
+    description:
+      "Projects the final hidden state at each position into one score (logit) per class — a sequence-classification head instead of a language-model head. The model's answer is the score vector at the last non-padding token; nothing is generated.",
+    formula: "logits = h Wᵀ  (read at the last token)",
+  },
+  output: {
+    ...componentRegistry.output,
+    label: "Class Logits",
+    description: "The raw logits over the classes, one row per input position — softmax over the last token's row gives the class probabilities.",
+  },
+};

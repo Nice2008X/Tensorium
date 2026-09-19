@@ -159,6 +159,12 @@ export const PRESET_MODELS = [
     isMoE: false,
     isLarge: true,
   },
+  {
+    repo: "AlexWortega/openjev/qwen3.5-4b-nli-v2",
+    label: "openjev-4B-v2 (real, text-only) · Jev-style NLI classifier on Qwen3.5-4B, 32 layers (24 Gated DeltaNet + 8 GQA), 3-class score head, 9.1 GB",
+    isMoE: false,
+    isLarge: true,
+  },
 ];
 
 // NOTE on DeepSeek LLM: architecturally it's plain Llama (LlamaAdapter loads

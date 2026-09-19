@@ -1,5 +1,10 @@
 import type { Tensor } from "@tensorium/model-ir";
 
+/** Display text for an output id: the class label for a sequence-classification model, otherwise the decoded vocabulary token. */
+export function outputTokenLabel(tokenizer: { decodeToken(id: number): string }, classLabels: string[] | undefined, id: number): string {
+  return classLabels ? (classLabels[id] ?? `#${id}`) : tokenizer.decodeToken(id);
+}
+
 export interface RankedToken {
   tokenId: number;
   prob: number;
