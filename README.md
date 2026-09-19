@@ -294,7 +294,7 @@ apps/
 | Qwen3-MoE | `adapter-qwen3-moe` | [`tiny-random/qwen3-moe`](https://huggingface.co/tiny-random/qwen3-moe) |
 | DeepSeek-V2 (MLA + DeepSeekMoE) | `adapter-deepseek-v2` | [`yujiepan/deepseek-v2-0628-tiny-random`](https://huggingface.co/yujiepan/deepseek-v2-0628-tiny-random) |
 | Gemma 4 (text decoder only) | `adapter-gemma4` | [`google/gemma-4-E2B`](https://huggingface.co/google/gemma-4-E2B) (real, structure-only) |
-| Qwen3.5 / Qwen3.8 (text decoder only) | `adapter-qwen3-5` | [`tiny-random/qwen3.5`](https://huggingface.co/tiny-random/qwen3.5) |
+| Qwen3.5 / Qwen3.8 (text decoder only; also `…ForSequenceClassification` checkpoints, which get a class-score head instead of an LM head) | `adapter-qwen3-5` | [`tiny-random/qwen3.5`](https://huggingface.co/tiny-random/qwen3.5), [`AlexWortega/openjev`](https://huggingface.co/AlexWortega/openjev/tree/main/qwen3.5-4b-nli-v2) (real Jev-style NLI classifier in a repo subfolder, structure-only) |
 | ZGCM-1 (sliding-window + gated attention) | `adapter-zgcm` | [`zgcagi/ZGCM-1-7B`](https://huggingface.co/zgcagi/ZGCM-1-7B) (real, structure-only) |
 
 These are all deliberately tiny (randomly-initialized, few-layer) test

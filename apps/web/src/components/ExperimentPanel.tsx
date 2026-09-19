@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ActivationCapture, Intervention, Model, ModelAdapter, ModelNode, WeightProvider } from "@tensorium/model-ir";
 import type { Tokenizer } from "@tensorium/tokenizer";
-import { topKFromLogits, type RankedToken } from "../logits.js";
+import { outputTokenLabel, topKFromLogits, type RankedToken } from "../logits.js";
 
 interface Props {
   model: Model;
@@ -121,7 +121,7 @@ export function ExperimentPanel({ model, weightProvider, adapter, tokenizer, sel
           <div className="experiment-compare-col">
             <div className="experiment-compare-title">Before</div>
             {outcome.before.map((t) => (
-              <RankRow key={t.tokenId} token={t} label={tokenizer.decodeToken(t.tokenId)} />
+              <RankRow key={t.tokenId} token={t} label={outputTokenLabel(tokenizer, model.config.classLabels, t.tokenId)} />
             ))}
           </div>
           <div className="experiment-compare-col">
@@ -129,7 +129,7 @@ export function ExperimentPanel({ model, weightProvider, adapter, tokenizer, sel
             {outcome.after.map((t) => {
               const beforeMatch = outcome.before.find((b) => b.tokenId === t.tokenId);
               const delta = beforeMatch ? t.prob - beforeMatch.prob : t.prob;
-              return <RankRow key={t.tokenId} token={t} label={tokenizer.decodeToken(t.tokenId)} delta={delta} />;
+              return <RankRow key={t.tokenId} token={t} label={outputTokenLabel(tokenizer, model.config.classLabels, t.tokenId)} delta={delta} />;
             })}
           </div>
         </div>

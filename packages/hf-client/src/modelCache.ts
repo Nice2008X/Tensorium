@@ -81,7 +81,8 @@ export type ByteProgressCallback = (loadedBytes: number, totalBytes: number | un
  * 206 whose Content-Range doesn't line up with what we already hold is an
  * error rather than a silently corrupt file.
  */
-async function streamDownload(url: string, onProgress?: ByteProgressCallback, control?: DownloadControl, segmented = false): Promise<WeightsBuffer> {
+async function streamDownload(url: string, onProgress?: ByteProgressCallback, control?: DownloadControl, segmented = false, maxBytes?: number): Promise<WeightsBuffer> {
+  const tooBig = () => new Error(`${url} is larger than the ${formatLimit(maxBytes!)} this kind of file is allowed to be — refusing to load it.`);
   let loaded = 0;
   let total: number | undefined;
   let target: Uint8Array | SegmentedBuffer | undefined;
@@ -108,6 +109,7 @@ async function streamDownload(url: string, onProgress?: ByteProgressCallback, co
         const header = res.headers.get("content-length");
         total = header ? Number(header) : undefined;
       }
+      if (maxBytes !== undefined && total !== undefined && total > maxBytes) throw tooBig();
       if (total !== undefined && !target && loaded === 0) {
         try {
           target = segmented && total > SEGMENT_BYTES ? new SegmentedBuffer(total) : new Uint8Array(total);
@@ -119,6 +121,7 @@ async function streamDownload(url: string, onProgress?: ByteProgressCallback, co
 
       if (!res.body) {
         const bytes = new Uint8Array(await res.arrayBuffer());
+        if (maxBytes !== undefined && bytes.byteLength > maxBytes) throw tooBig();
         onProgress?.(bytes.byteLength, bytes.byteLength);
         return bytes.buffer;
       }
@@ -127,6 +130,10 @@ async function streamDownload(url: string, onProgress?: ByteProgressCallback, co
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (maxBytes !== undefined && loaded + value.byteLength > maxBytes) {
+          await reader.cancel().catch(() => undefined);
+          throw tooBig();
+        }
         if (target) {
           if (loaded + value.byteLength > target.byteLength) throw new Error(`Received more data than the ${target.byteLength} bytes ${url} advertised.`);
           if (target instanceof SegmentedBuffer) target.write(loaded, value);
@@ -177,8 +184,8 @@ async function streamDownload(url: string, onProgress?: ByteProgressCallback, co
  * A cache hit reports `onProgress` once, immediately, at 100% — there's no
  * network transfer to time, but callers shouldn't have to special-case that.
  */
-export async function fetchCachedArrayBuffer(url: string, onProgress?: ByteProgressCallback, control?: DownloadControl): Promise<ArrayBuffer> {
-  return (await fetchCachedBytes(url, onProgress, control, false)) as ArrayBuffer;
+export async function fetchCachedArrayBuffer(url: string, onProgress?: ByteProgressCallback, control?: DownloadControl, maxBytes?: number): Promise<ArrayBuffer> {
+  return (await fetchCachedBytes(url, onProgress, control, false, maxBytes)) as ArrayBuffer;
 }
 
 /** Same as fetchCachedArrayBuffer, but a file too big for one ArrayBuffer comes back as a SegmentedBuffer. Only meant for weight files, which are never cached (far over MAX_CACHEABLE_BYTES). */
@@ -186,16 +193,26 @@ export function fetchCachedWeights(url: string, onProgress?: ByteProgressCallbac
   return fetchCachedBytes(url, onProgress, control, true);
 }
 
-async function fetchCachedBytes(url: string, onProgress: ByteProgressCallback | undefined, control: DownloadControl | undefined, segmented: boolean): Promise<WeightsBuffer> {
+function formatLimit(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${Math.round(bytes / (1024 * 1024))} MB` : `${Math.round(bytes / 1024)} KB`;
+}
+
+async function fetchCachedBytes(
+  url: string,
+  onProgress: ByteProgressCallback | undefined,
+  control: DownloadControl | undefined,
+  segmented: boolean,
+  maxBytes?: number
+): Promise<WeightsBuffer> {
   const cached = await getCached(url);
-  if (cached) {
+  if (cached && (maxBytes === undefined || cached.byteLength <= maxBytes)) {
     onProgress?.(cached.byteLength, cached.byteLength);
     return cached;
   }
 
   let bytes: WeightsBuffer;
-  if (onProgress || control) {
-    bytes = await streamDownload(url, onProgress, control, segmented);
+  if (onProgress || control || maxBytes !== undefined) {
+    bytes = await streamDownload(url, onProgress, control, segmented, maxBytes);
   } else {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);

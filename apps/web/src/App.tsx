@@ -20,6 +20,7 @@ import { Inspector } from "./components/Inspector.js";
 import { TensorExplorer, type TensorSourceRequest } from "./components/TensorExplorer.js";
 import { InferencePanel } from "./components/InferencePanel.js";
 import { PredictionPanel } from "./components/PredictionPanel.js";
+import { sanitizeFileName } from "./format.js";
 import { LogitLensPanel } from "./components/LogitLensPanel.js";
 import { TokenAttributionPanel } from "./components/TokenAttributionPanel.js";
 import { ExperimentPanel } from "./components/ExperimentPanel.js";
@@ -305,7 +306,7 @@ export function App() {
   // the original bytes, not anything re-serialized from the parsed/decoded
   // in-memory model) — this is what lets the files saved here be loaded
   // straight back in via "Local files" with no round-trip loss.
-  const safeModelName = model.name.replace(/[\\/:*?"<>|]+/g, "-");
+  const safeModelName = sanitizeFileName(model.name);
   const saveModelFiles: SaveModelFile[] = [
     state.rawFiles?.weightsBytes && { filename: `${safeModelName}.safetensors`, bytes: state.rawFiles.weightsBytes.byteLength },
     state.rawFiles?.configBytes && { filename: `${safeModelName}.config.json`, bytes: state.rawFiles.configBytes.byteLength },
@@ -523,6 +524,7 @@ export function App() {
           <PredictionPanel
             result={inference.state.result!}
             tokenizer={state.tokenizer}
+            classLabels={state.model?.config.classLabels}
             selectedTokenIndex={selectedTokenIndex}
             onViewWhy={() => viewWhy("A")}
             collapsed={predictionCollapsed}
@@ -533,6 +535,7 @@ export function App() {
             <PredictionPanel
               result={promptB.state.result!}
               tokenizer={state.tokenizer}
+              classLabels={state.model?.config.classLabels}
               selectedTokenIndex={selectedTokenIndex}
               onViewWhy={() => viewWhy("B")}
               collapsed={predictionCollapsed}
