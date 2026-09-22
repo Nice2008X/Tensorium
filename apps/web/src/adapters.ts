@@ -14,6 +14,7 @@ import { DeepseekV2Adapter } from "@tensorium/adapter-deepseek-v2";
 import { Gemma4Adapter } from "@tensorium/adapter-gemma4";
 import { Qwen35Adapter } from "@tensorium/adapter-qwen3-5";
 import { ZgcmAdapter } from "@tensorium/adapter-zgcm";
+import { MuseGlimmerAdapter } from "@tensorium/adapter-museglimmer";
 import { GenericAdapter } from "@tensorium/adapter-generic";
 
 /**
@@ -57,6 +58,18 @@ import { GenericAdapter } from "@tensorium/adapter-generic";
  * It's also multimodal (text + vision tower + an optional multi-token-
  * prediction head), handled the same way Gemma 4's vision/audio towers
  * are: this adapter reads the text decoder only.
+ * Muse Glimmer (model_type "muse_glimmer") gets its own package for the
+ * same reason again, and stacks several divergences from
+ * adapter-llama-family at once: a Gemma-2-style four-norm sandwich per
+ * block but with the pre/post pairs at two different epsilons, a
+ * weightless per-head QK-norm followed by a Q-only constant scale factor
+ * on top of the usual 1/sqrt(head_dim), a per-layer NoPE toggle (every
+ * 4th layer counting backward from the last gets no RoPE at all), every
+ * layer gating its attention output through a sigmoid (not just some, as
+ * ZGCM does), a weightless RMSNorm on the raw embedding lookup, and a
+ * two-stage logit rescale (a constant multiplier, then a Gemma-style tanh
+ * softcap). It's multimodal too (text decoder + a separate ViT-style
+ * vision tower) — read the text decoder only, same as Gemma 4.
  *
  * Every one of these is hand-verified: a human confirmed its exact
  * behavior against the real architecture before it shipped. GenericAdapter
@@ -84,6 +97,7 @@ export const NAMED_ADAPTERS: ModelAdapter[] = [
   Gemma4Adapter,
   Qwen35Adapter,
   ZgcmAdapter,
+  MuseGlimmerAdapter,
 ];
 
 export { GenericAdapter };
@@ -162,6 +176,12 @@ export const PRESET_MODELS = [
   {
     repo: "AlexWortega/openjev/qwen3.5-4b-nli-v2",
     label: "openjev-4B-v2 (real, text-only) · Jev-style NLI classifier on Qwen3.5-4B, 32 layers (24 Gated DeltaNet + 8 GQA), 3-class score head, 9.1 GB",
+    isMoE: false,
+    isLarge: true,
+  },
+  {
+    repo: "meta-models/Muse-Glimmer-30B",
+    label: "Muse Glimmer 30B (real, text-only) · 52 layers, sliding+NoPE attention, gated output, sandwich norm, sharded, 59.6 GB",
     isMoE: false,
     isLarge: true,
   },
