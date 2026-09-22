@@ -6,7 +6,7 @@ An interactive, in-browser explorer and debugger for large language model
 internals. Point it at a Hugging Face repo that ships `safetensors`
 weights for one of the [supported architectures](#supported-architectures)
 (GPT-2, Llama, Mistral, Gemma, Gemma 4, Qwen2, Qwen3, Qwen3.5/Qwen3.8,
-Phi-3/4, GLM-4, ZGCM, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2) and it parses
+Phi-3/4, GLM-4, ZGCM, Muse Glimmer, OLMo, Qwen2-MoE, Qwen3-MoE, or DeepSeek-V2) and it parses
 the model's real config and weights, renders its architecture as a
 navigable graph — laid out by [ELK](https://eclipse.dev/elk/), the same
 layered-graph engine used by professional diagramming tools, not an ad
@@ -205,19 +205,25 @@ they're all thin wrappers around one shared, option-parameterized engine
 (`adapter-llama-family`) — see [Adding a new
 architecture](#adding-a-new-architecture).
 
-Three architectures are structurally different enough that they get their
+Four architectures are structurally different enough that they get their
 own adapter package instead of another `adapter-llama-family` option:
 **DeepSeek-V2**'s Multi-head Latent Attention (K/V reconstructed from one
 shared low-rank latent, with only part of each head rotated) and
 DeepSeekMoE; **Gemma 4**'s alternating sliding/global attention with two
 different head_dim/RoPE configurations, per-layer frozen K/V reuse on
 some layers, and a per-layer embedding table (text decoder only — its
-vision/audio towers aren't loaded); and **Qwen3.5/Qwen3.8**'s hybrid
+vision/audio towers aren't loaded); **Qwen3.5/Qwen3.8**'s hybrid
 decoder, where most layers run a linear/recurrent Gated DeltaNet
 mechanism (a short causal convolution feeding a per-token recurrent
 state update — nothing like softmax attention) interleaved with periodic
 ordinary GQA layers (text decoder only here too — its vision tower isn't
-loaded).
+loaded); and **Muse Glimmer**'s Gemma-2-style four-norm sandwich per
+block (at two different epsilons for the pre/post pairs) combined with a
+weightless per-head QK-norm plus a Q-only constant scale factor, a
+per-layer NoPE toggle (every 4th layer counting backward from the last
+gets no RoPE at all), and every layer — not just some — gating its
+attention output through a sigmoid (text decoder only too — its vision
+tower isn't loaded).
 
 ## Project layout
 
@@ -269,6 +275,12 @@ packages/
                           linear/recurrent Gated DeltaNet mechanism with
                           periodic ordinary GQA layers. Text decoder only —
                           the vision tower isn't loaded.
+    museglimmer/            Own adapter: Gemma-2-style four-norm sandwich per
+                          block at two different epsilons, weightless
+                          per-head QK-norm plus a Q-only constant scale
+                          factor, a per-layer NoPE toggle, and every layer
+                          gating its attention output through a sigmoid.
+                          Text decoder only — the vision tower isn't loaded.
 apps/
   web/                    React UI: tree / architecture graph (React Flow for
                           rendering, ELK for layout) / inspector / tensor
@@ -296,6 +308,7 @@ apps/
 | Gemma 4 (text decoder only) | `adapter-gemma4` | [`google/gemma-4-E2B`](https://huggingface.co/google/gemma-4-E2B) (real, structure-only) |
 | Qwen3.5 / Qwen3.8 (text decoder only; also `…ForSequenceClassification` checkpoints, which get a class-score head instead of an LM head) | `adapter-qwen3-5` | [`tiny-random/qwen3.5`](https://huggingface.co/tiny-random/qwen3.5), [`AlexWortega/openjev`](https://huggingface.co/AlexWortega/openjev/tree/main/qwen3.5-4b-nli-v2) (real Jev-style NLI classifier in a repo subfolder, structure-only) |
 | ZGCM-1 (sliding-window + gated attention) | `adapter-zgcm` | [`zgcagi/ZGCM-1-7B`](https://huggingface.co/zgcagi/ZGCM-1-7B) (real, structure-only) |
+| Muse Glimmer (text decoder only) | `adapter-museglimmer` | [`meta-models/Muse-Glimmer-30B`](https://huggingface.co/meta-models/Muse-Glimmer-30B) (real, structure-only) |
 
 These are all deliberately tiny (randomly-initialized, few-layer) test
 checkpoints, chosen so the full model can be loaded and explored instantly
@@ -325,9 +338,9 @@ partial RoPE whose width is truncated (not rounded) to an even number. Its
 forward pass was checked against the model's own PyTorch code on a tiny
 random checkpoint (every layer's hidden state and the logits agree to ~1e-5).
 
-For a genuinely multimodal checkpoint (Gemma 4, Qwen3.5/Qwen3.8), only
-the text decoder is loaded — the vision (and, for Gemma 4, audio) towers
-are parsed out of the checkpoint's structure but never rendered or run,
+For a genuinely multimodal checkpoint (Gemma 4, Qwen3.5/Qwen3.8, Muse
+Glimmer), only the text decoder is loaded — the vision (and, for Gemma 4,
+audio) towers are parsed out of the checkpoint's structure but never rendered or run,
 since neither this app's graph/Inspector nor its forward-pass machinery
 understand a non-transformer tower yet. What's still fully out of scope
 is full-size checkpoints without any adapter path at all (a production
